@@ -40,7 +40,7 @@ call boundary.
 | 2 | `govern()` wraps the same tools. Both attacks are blocked; the legitimate anonymised export still flows. |
 | 3 | Policy reads a **parsed SQL AST**, not the query string — including the case where parsing alone is not enough. |
 | 4 | `require_approval` routes a bulk send to a human, who approves one and rejects another. |
-| 5 | Same tool, same arguments, different agent identity → different verdict. |
+| 5 | Same tool, same arguments, different agent identity → different verdict (identity is self-asserted; see finding 6). |
 | 6 | The audit chain is verified, then forged, and the forgery is detected. |
 
 ## What it looks like
@@ -120,7 +120,7 @@ default doing its job.
 
 ## Findings from building this
 
-Four defects in AGT 4.1.0, each reproduced against the installed package. Nothing
+Seven defects in AGT 4.1.0, each reproduced against the installed package. Nothing
 here is inferred from documentation.
 
 ### 1. `agt lint-policy` rejects policies the runtime executes
@@ -174,9 +174,44 @@ private `_extractors` list, which [`sqlfacets.py`](sqlfacets.py) does and docume
 Reproduce all four:
 
 ```bash
-.venv/bin/agt lint-policy policies/          # finding 1
-.venv/bin/python -m pytest -q                # findings 2-4, if you add tests
+.venv/bin/agt lint-policy policies/     # finding 1
+.venv/bin/python check_policy.py        # passes; break a field name to see finding 5
 ```
+
+### 5. A misspelled field in a condition silently turns a deny into an allow
+
+The condition grammar has no notion of an unknown field. An expression naming a
+field nothing puts in the context evaluates `False`, the rule stops matching, and
+nothing warns you. Rename `data.contains_pii` to `data.has_pii` in
+`baseline.yaml` and a 12,000-row PII export goes from DENIED to **ALLOWED**:
+
+```
+PII export: expected deny/block-pii-export, got allow/allow-anonymised-export
+```
+
+`default_action: deny` does not save you — a sibling `allow` rule picks the call
+up instead. `agt lint-policy` validates structure, not field names, so it passes
+the broken policy.
+
+This is why [`check_policy.py`](check_policy.py) exists: one case that must match
+per rule, one that must not, and a coverage assertion that every enabled rule is
+reachable. A rule nothing can reach is not protecting anything. Run it in CI —
+it is the control that turns this silent failure into a loud one.
+
+### 6. `agent_id` is self-asserted
+
+`Policy.applies_to` is a plain string comparison against the `agent_id` passed to
+`govern()`. Nothing authenticates it. Per-agent scoping — Act 5 in this demo — is
+therefore an honour system: it correctly routes a *cooperative* agent to its own
+policy, but an agent that names itself something else gets that something else's
+grants. Useful for separating concerns; not a security boundary.
+
+### 7. `GovernanceConfig.audit_file` does nothing
+
+Declared at `govern.py:100` and `:113`, read nowhere in the package. Setting it
+silently has no effect, and `govern()` has no shared-sink parameter either — so
+every governed callable keeps a private in-memory `AuditLog`. That is why Act 6
+shows one tool's ledger rather than a fleet-wide one.
 
 Findings 2-4 are why this repo ships its own extractor rather than pinning an
 ancient sqlglot. Treat the runtime as the source of truth; this demo does.
@@ -188,5 +223,8 @@ ancient sqlglot. Treat the runtime as the source of truth; this demo does.
 - `demo.py` — the six acts.
 - `theatre.py` — terminal presentation only, no governance logic.
 - `sqlfacets.py` — a replacement SQL facet extractor; see findings 2-4.
+- `check_policy.py` — condition-coverage test for the policies; see finding 5.
+- `docs/ARCHITECTURE.md` — design for governing a multi-agent build.
+- `docs/PARALLEL_AGENT_PLAN.md` — how several agents would build this repo.
 - `capture.py` — re-renders the README images from a real run.
 - `docs/images/` — generated; do not hand-edit.
