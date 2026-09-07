@@ -1,0 +1,31 @@
+apiVersion: governance.toolkit/v1
+version: "1.0"
+name: acme-baseline
+description: >
+  Organization-wide controls that apply to every agent at ACME.
+  Team policies inherit this file via `extends`. Inheritance is
+  additive-only: a team can add rules, it cannot weaken these.
+scope: global
+default_action: deny
+
+rules:
+  # sql.verb is not a string match on the query text. AGT parses the
+  # statement into an AST and exposes the verb as a policy facet, so
+  # casing, comments and whitespace tricks cannot get past this rule.
+  - name: block-schema-destructive-sql
+    condition: "sql.verb in ['DROP', 'TRUNCATE', 'ALTER', 'GRANT']"
+    action: deny
+    priority: 100
+    description: "Schema-destructive SQL from an agent is never permitted"
+
+  - name: block-row-deletion
+    condition: "sql.verb in ['DELETE', 'UPDATE']"
+    action: deny
+    priority: 100
+    description: "Writes must go through a reviewed migration, not an agent"
+
+  - name: block-pii-export
+    condition: "action.type == 'export_dataset' and data.contains_pii"
+    action: deny
+    priority: 90
+    description: "Personal data may not leave the platform via an agent"

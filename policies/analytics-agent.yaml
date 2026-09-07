@@ -1,0 +1,16 @@
+apiVersion: governance.toolkit/v1
+version: "1.0"
+name: analytics-agent-atlas
+description: >
+  Atlas, the analytics agent. Same baseline, a strictly smaller grant:
+  it may read, and that is all. It cannot send mail at any volume.
+extends: ["baseline.yaml"]
+scope: agent
+agents: ["did:mesh:analytics-atlas"]
+default_action: deny
+
+rules:
+  - name: allow-read-queries
+    condition: "sql.verb == 'SELECT'"
+    action: allow
+    description: "Atlas is a read-only consumer of the warehouse"

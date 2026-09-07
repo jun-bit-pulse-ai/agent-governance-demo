@@ -1,0 +1,33 @@
+apiVersion: governance.toolkit/v1
+version: "1.0"
+name: support-agent-nova
+description: >
+  Nova, the customer-support agent. Inherits every rule in the ACME
+  baseline and adds the permissions this team actually needs.
+extends: ["baseline.yaml"]
+scope: agent
+agents: ["did:mesh:support-nova"]
+default_action: deny        # fail closed: anything not granted is refused
+
+rules:
+  - name: allow-read-queries
+    condition: "sql.verb == 'SELECT'"
+    action: allow
+    description: "Read-only queries are Nova's normal work"
+
+  - name: allow-routine-email
+    condition: "action.type == 'send_email' and recipients.value < 50"
+    action: allow
+    description: "Replying to a customer needs no ceremony"
+
+  - name: approve-bulk-email
+    condition: "action.type == 'send_email' and recipients.value >= 50"
+    action: require_approval
+    approvers: ["security-team"]
+    priority: 50
+    description: "Anything campaign-shaped gets a human in the loop"
+
+  - name: allow-anonymised-export
+    condition: "action.type == 'export_dataset' and rows.value <= 50000"
+    action: allow
+    description: "Bounded, non-personal exports are fine — up to 50k rows"

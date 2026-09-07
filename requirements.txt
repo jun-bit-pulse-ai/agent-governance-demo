@@ -1,0 +1,10 @@
+# Pinned to the versions this demo was verified against.
+agent-governance-toolkit[full]==4.1.0
+
+# Required for AGT's SQL policy facets (sql.verb). NOT pulled in by the
+# [full] extra — without it sql.verb degrades to UNKNOWN and Act 3 breaks.
+sqlglot
+
+# Terminal presentation. Arrives transitively via AGT, listed explicitly
+# because theatre.py imports it directly.
+rich
