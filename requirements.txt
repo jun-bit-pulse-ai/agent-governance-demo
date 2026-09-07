@@ -1,10 +1,15 @@
 # Pinned to the versions this demo was verified against.
 agent-governance-toolkit[full]==4.1.0
 
-# Required for AGT's SQL policy facets (sql.verb). NOT pulled in by the
-# [full] extra — without it sql.verb degrades to UNKNOWN and Act 3 breaks.
-sqlglot
+# AGT needs sqlglot to parse SQL into policy facets, but its [full] extra does
+# not install it. Without it every sql.* facet becomes UNKNOWN and SQL rules
+# stop matching — silently, with only a log warning.
+#
+# Note this demo replaces AGT's own extractor (see sqlfacets.py and findings
+# 2-4 in the README), so it is not sensitive to sqlglot's expression-class
+# renames the way the shipped one is.
+sqlglot==30.18.0
 
-# Terminal presentation. Arrives transitively via AGT, listed explicitly
+# Terminal presentation. Arrives transitively via AGT, pinned explicitly
 # because theatre.py imports it directly.
-rich
+rich==15.0.0

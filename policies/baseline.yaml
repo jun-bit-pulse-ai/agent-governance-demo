@@ -9,9 +9,12 @@ scope: global
 default_action: deny
 
 rules:
-  # sql.verb is not a string match on the query text. AGT parses the
-  # statement into an AST and exposes the verb as a policy facet, so
-  # casing, comments and whitespace tricks cannot get past this rule.
+  # sql.verb is not a string match on the query text: the statement is
+  # parsed and the verb read off the AST, so casing, comment and whitespace
+  # tricks do not get past this rule. Multi-statement scripts DO defeat AGT's
+  # own extractor, which reads only the first statement — this repo replaces
+  # it (see sqlfacets.py). The rule below is only as good as the facet
+  # feeding it, which is why db-query-is-select-only backs it up.
   - name: block-schema-destructive-sql
     condition: "sql.verb in ['DROP', 'TRUNCATE', 'ALTER', 'GRANT']"
     action: deny
@@ -22,7 +25,17 @@ rules:
     condition: "sql.verb in ['DELETE', 'UPDATE']"
     action: deny
     priority: 100
-    description: "Writes must go through a reviewed migration, not an agent"
+    description: "DELETE and UPDATE must go through a reviewed migration"
+
+  # Backstop. If the SQL cannot be parsed at all — sqlglot missing, a dialect
+  # the parser chokes on — sql.verb is absent, every verb rule above misses,
+  # and this denies under a NAMED rule instead of falling through to the
+  # policy default. A denial the audit log can attribute to a rule.
+  - name: db-query-is-select-only
+    condition: "action.type == 'db_query' and sql.verb != 'SELECT'"
+    action: deny
+    priority: 80
+    description: "Agents may only read; anything not a parsed SELECT is refused"
 
   - name: block-pii-export
     condition: "action.type == 'export_dataset' and data.contains_pii"

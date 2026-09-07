@@ -1,0 +1,1470 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interlock — Agent Governance Toolkit</title>
+<style>
+/* ══ TOKENS ══════════════════════════════════════════════════════════════
+   Light is the default (:root). Dark overrides under prefers-color-scheme,
+   and [data-theme] lets a presenter force either one on a projector.       */
+:root{
+  --ground:#E7EAEC;      /* concrete, deliberately not cream */
+  --panel:#FFFFFF;
+  --structural:#C0C7CD;  /* the 2px rules and channel walls */
+  --ink:#0E1419;
+  --muted:#5D686F;
+  --deny:#C11029;  --deny-ink:#FFFFFF;
+  --approval:#FFB020; --approval-ink:#8A5B00;
+  --allow:#0B7D48;
+  --dead:#9AA4AC;
+  --steel:#AAB3BA;       /* the gate at rest */
+  --steel-2:#96A0A8;
+  --hatch:rgba(14,20,25,.09);
+  --shade:rgba(14,20,25,.04);
+  --sans:ui-sans-serif,-apple-system,"Segoe UI Variable Display","Segoe UI","Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --gate-top:126px;
+  --channel-h:252px;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ground:#0F1317; --panel:#171C21; --structural:#29323A;
+    --ink:#EEF2F5; --muted:#8C97A1;
+    --deny:#F0384B; --deny-ink:#FFFFFF;
+    --approval:#FFB020; --approval-ink:#2A1D00;
+    --allow:#2FCF7F; --dead:#5A646D;
+    --steel:#3C4650; --steel-2:#333C45;
+    --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0F1317; --panel:#171C21; --structural:#29323A;
+  --ink:#EEF2F5; --muted:#8C97A1;
+  --deny:#F0384B; --deny-ink:#FFFFFF;
+  --approval:#FFB020; --approval-ink:#2A1D00;
+  --allow:#2FCF7F; --dead:#5A646D;
+  --steel:#3C4650; --steel-2:#333C45;
+  --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
+}
+
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--ground); color:var(--ink);
+  font:15px/1.45 var(--mono);
+  -webkit-font-smoothing:antialiased;
+  padding-bottom:74px; /* the pinned audit drawer */
+}
+button,input,textarea,select{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--ink);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+/* ══ SHARED PARTS ═══════════════════════════════════════════════════════ */
+/* the machine placard: a 1px ruled box with a tracked mono label */
+.plc{
+  display:inline-block;border:1px solid var(--structural);
+  padding:3px 8px;font:12px/1.25 var(--mono);
+  text-transform:uppercase;letter-spacing:.2em;color:var(--muted);
+  white-space:nowrap;
+}
+/* provenance: the engine's own field path, lowercase mono, never tracked */
+.path{font:13px/1.3 var(--mono);color:var(--muted);text-transform:none;letter-spacing:0}
+.num{font-variant-numeric:tabular-nums}
+.disp{font-family:var(--sans);font-weight:800;text-transform:uppercase;letter-spacing:-.03em}
+
+/* ══ HEAD RAIL ══════════════════════════════════════════════════════════ */
+.rail{
+  display:flex;flex-wrap:wrap;gap:14px 22px;align-items:baseline;
+  padding:14px 22px;border-bottom:2px solid var(--structural);background:var(--panel);
+}
+.rail h1{margin:0;font:800 21px/1 var(--sans);letter-spacing:-.03em;text-transform:uppercase}
+.rail .sub{color:var(--muted);font-size:14px}
+.rail .right{margin-left:auto;display:flex;gap:10px;align-items:center}
+.ghost{
+  background:none;border:1px solid var(--structural);color:var(--muted);
+  padding:5px 10px;font:12px/1.25 var(--mono);text-transform:uppercase;letter-spacing:.16em;
+  cursor:pointer;
+}
+.ghost:hover{color:var(--ink);border-color:var(--ink)}
+
+/* ══ GLOBAL ALERT ═══════════════════════════════════════════════════════ */
+#alert{display:none;margin:0;padding:14px 22px;border-bottom:2px solid var(--structural);
+  background:var(--shade);
+  background-image:repeating-linear-gradient(45deg,transparent 0 9px,var(--hatch) 9px 18px);
+}
+#alert.on{display:block}
+#alert .t{font:800 15px/1.3 var(--sans);text-transform:uppercase;letter-spacing:.02em}
+#alert .m{color:var(--ink);font-size:15px;margin-top:4px;word-break:break-word}
+
+/* ══ BAND 1 — THE CALL ══════════════════════════════════════════════════ */
+.band-call{padding:14px 22px 16px;border-bottom:2px solid var(--structural);background:var(--panel)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.chips .plc{border-color:var(--structural);color:var(--muted);align-self:center}
+.chip{
+  background:none;border:1px solid var(--structural);color:var(--ink);
+  padding:7px 11px;font:15px/1.2 var(--mono);cursor:pointer;
+}
+.chip:hover{border-color:var(--ink);background:var(--shade)}
+.chip .who{color:var(--muted);font-size:13px}
+
+.callgrid{display:grid;grid-template-columns:250px minmax(0,1fr) 300px;gap:22px;align-items:start}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+legend{padding:0;margin:0 0 8px}
+.pick{display:flex;flex-direction:column;gap:6px}
+.pick label{
+  display:flex;gap:10px;align-items:baseline;cursor:pointer;
+  border:1px solid var(--structural);padding:8px 10px;background:var(--panel);
+}
+.pick label:hover{border-color:var(--ink)}
+.pick input{position:absolute;opacity:0;width:0;height:0}
+.pick .mark{width:12px;height:12px;border:2px solid var(--structural);flex:none;align-self:center}
+.pick input:checked + .mark{background:var(--ink);border-color:var(--ink)}
+.pick input:focus-visible + .mark{outline:3px solid var(--ink);outline-offset:2px}
+.pick .nm{font-size:15px}
+.pick .id{display:block;font-size:12.5px;color:var(--muted);word-break:break-all}
+.pick label:has(input:checked){border-color:var(--ink)}
+
+.args{display:flex;flex-direction:column;gap:12px}
+.arg{display:grid;grid-template-columns:1fr;gap:5px}
+.arg .lab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.arg .lab .n{font:800 13px/1.2 var(--sans);text-transform:uppercase;letter-spacing:.06em}
+.arg input[type=text],.arg textarea,.arg input[type=number]{
+  width:100%;background:var(--ground);border:1px solid var(--structural);
+  color:var(--ink);padding:9px 10px;font:16px/1.4 var(--mono);
+}
+.arg textarea{resize:vertical;min-height:66px}
+.stepper{display:flex;align-items:stretch;gap:0;max-width:340px}
+.stepper button{
+  width:46px;background:var(--ground);border:1px solid var(--structural);
+  cursor:pointer;font:800 20px/1 var(--sans);color:var(--ink);
+}
+.stepper button:hover{background:var(--shade);border-color:var(--ink)}
+.stepper input{border-left:0;border-right:0;text-align:right;font-variant-numeric:tabular-nums;font-size:20px!important}
+.toggle{display:inline-flex;align-items:center;gap:12px;cursor:pointer}
+.toggle input{position:absolute;opacity:0;width:0;height:0}
+.lever{
+  width:64px;height:32px;border:2px solid var(--structural);background:var(--ground);
+  position:relative;flex:none;
+}
+.lever::after{
+  content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;
+  background:var(--structural);transition:transform .14s,background .14s;
+}
+.toggle input:checked + .lever::after{transform:translateX(30px);background:var(--ink)}
+.toggle input:checked + .lever{border-color:var(--ink)}
+.toggle input:focus-visible + .lever{outline:3px solid var(--ink);outline-offset:2px}
+.toggle .state{font:12px/1 var(--mono);text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+
+.runcol{display:flex;flex-direction:column;gap:10px}
+.run{
+  width:100%;min-height:64px;padding:0 18px;cursor:pointer;
+  background:var(--ink);color:var(--ground);border:2px solid var(--ink);
+  font:800 26px/1 var(--sans);text-transform:uppercase;letter-spacing:-.03em;
+}
+.run:hover{background:var(--panel);color:var(--ink)}
+.run[disabled]{opacity:.45;cursor:progress}
+.run2{
+  width:100%;padding:11px 12px;cursor:pointer;background:none;
+  border:1px solid var(--structural);color:var(--ink);
+  font:15px/1.2 var(--mono);
+}
+.run2:hover{border-color:var(--ink);background:var(--shade)}
+.run2[disabled]{opacity:.45;cursor:progress}
+.tally{display:flex;flex-wrap:wrap;gap:6px}
+.tally b{color:var(--ink);font-weight:400}
+
+/* ══ THE SPLIT — lanes over estate, one continuous divider ══════════════ */
+.split{
+  display:grid;grid-template-columns:minmax(0,1fr) 2px minmax(0,1fr);
+  background:var(--panel);
+}
+.divider{grid-column:2;grid-row:1 / span 2;background:var(--structural)}
+.lane{padding:14px 22px 18px;min-width:0}
+.lane h2{margin:0;font:20px/1.35 var(--mono);word-break:break-word;font-weight:400}
+.lane h2 .w{color:var(--muted)}
+.lane .eyebrow{margin:8px 0 12px}
+
+/* the channel */
+.channel{
+  position:relative;height:var(--channel-h);overflow:hidden;
+  border-left:3px solid var(--structural);border-right:3px solid var(--structural);
+  background:linear-gradient(var(--shade),var(--shade));
+}
+.gaterow{position:absolute;left:-3px;right:-3px;top:var(--gate-top);height:48px}
+.nocontrol{
+  position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  color:var(--muted);font:12px/1 var(--mono);text-transform:uppercase;letter-spacing:.2em;
+  border-top:1px dashed var(--structural);border-bottom:1px dashed var(--structural);
+}
+.token{
+  position:absolute;left:50%;top:0;
+  transform:translate(-50%,8px);
+  border:1px solid var(--structural);background:var(--panel);
+  padding:5px 10px;font:15px/1.2 var(--mono);white-space:nowrap;
+  transition:transform .32s cubic-bezier(.4,0,.6,1);
+}
+.channel[data-run="idle"] .token{opacity:.35}
+
+/* the gate: two machined halves, hazard chevrons, a bolt at each end */
+.gate{position:absolute;inset:0}
+.half{
+  position:absolute;top:0;height:100%;width:50%;
+  border-top:2px solid var(--steel-2);border-bottom:2px solid var(--steel-2);
+  background:var(--steel);
+  transition:transform .22s cubic-bezier(.3,0,.2,1),background-color .18s;
+}
+.half.l{left:0;border-right:1px solid var(--steel-2)}
+.half.r{right:0;border-left:1px solid var(--steel-2)}
+.bolt{
+  position:absolute;top:50%;width:14px;height:14px;margin-top:-7px;border-radius:50%;
+  background:var(--steel-2);box-shadow:inset 0 0 0 2px var(--panel);
+}
+.half.l .bolt{left:7px}
+.half.r .bolt{right:7px}
+.gate[data-state="shut"] .half,
+.gate[data-state="held"] .half{
+  background-image:repeating-linear-gradient(45deg,transparent 0 9px,rgba(0,0,0,.28) 9px 18px);
+}
+.gate[data-state="shut"] .half{background-color:var(--deny)}
+.gate[data-state="held"] .half{background-color:var(--approval)}
+.gate[data-state="held"] .half.l{transform:translateX(-46%)}
+.gate[data-state="held"] .half.r{transform:translateX(46%)}
+.gate[data-state="open"] .half.l{transform:translateX(-101%)}
+.gate[data-state="open"] .half.r{transform:translateX(101%)}
+.gate[data-state="dark"] .half{
+  background-color:var(--steel);
+  background-image:repeating-linear-gradient(45deg,transparent 0 9px,rgba(0,0,0,.10) 9px 18px);
+}
+.gate[data-state="unlit"] .half{background-color:var(--dead);background-image:none;opacity:.75}
+.gate.thump{animation:thump .06s steps(2) 3}
+@keyframes thump{0%{margin-left:0}50%{margin-left:-1px}100%{margin-left:0}}
+.approver{
+  position:absolute;right:6px;top:-36px;
+  background:var(--approval);color:var(--approval-ink);border:1px solid var(--approval);
+  padding:4px 9px;font:14px/1.2 var(--mono);white-space:nowrap;max-width:calc(100% - 12px);
+  overflow:hidden;text-overflow:ellipsis;
+}
+
+/* outcome placards */
+.outcome{margin-top:14px;min-height:96px}
+.verdict{
+  display:block;padding:10px 14px;font:800 34px/1.1 var(--sans);
+  text-transform:uppercase;letter-spacing:-.03em;
+}
+.verdict.deny{background:var(--deny);color:var(--deny-ink)}
+.verdict.hold{background:var(--approval);color:var(--approval-ink)}
+.verdict.allow{
+  padding:0 0 8px;border-bottom:3px solid var(--allow);color:var(--allow);
+  font-size:22px;letter-spacing:.04em;
+}
+.verdict.plain{padding:0 0 8px;border-bottom:3px solid var(--structural);font-size:22px;letter-spacing:.04em}
+.verdict.novrd{
+  background:var(--shade);color:var(--ink);border:2px dashed var(--structural);
+  background-image:repeating-linear-gradient(45deg,transparent 0 9px,var(--hatch) 9px 18px);
+  font-size:26px;
+}
+.rows{margin:12px 0 0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:7px 16px;align-items:baseline}
+.rows dt{margin:0}
+.rows dd{margin:0;font:16px/1.4 var(--mono);word-break:break-word}
+.rows dd.reason{font-size:17px}
+.facets{margin-top:14px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.facet{border:1px solid var(--structural);padding:4px 9px;font:14px/1.2 var(--mono)}
+.facet b{font-weight:400;color:var(--muted)}
+.linkish{
+  background:none;border:0;padding:0;color:inherit;font:inherit;
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer;
+}
+.linkish:hover{text-decoration-thickness:2px}
+details.raw{margin-top:16px;border-top:1px solid var(--structural);padding-top:10px}
+details.raw summary{cursor:pointer;font:12px/1.4 var(--mono);text-transform:uppercase;letter-spacing:.2em;color:var(--muted)}
+details.raw summary:hover{color:var(--ink)}
+details.raw pre{
+  margin:10px 0 0;padding:11px;background:var(--ground);border:1px solid var(--structural);
+  overflow-x:auto;font:13px/1.5 var(--mono);max-height:300px;
+}
+
+/* ══ BAND 3 — THE ESTATE ════════════════════════════════════════════════ */
+.estate{padding:0 22px 22px;min-width:0}
+.estate .head{
+  display:flex;gap:12px;align-items:baseline;flex-wrap:wrap;
+  border-top:2px solid var(--structural);padding:14px 0 12px;margin-top:2px;
+}
+.erow{
+  display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:14px;align-items:baseline;
+  height:56px;border-bottom:1px solid var(--structural);
+}
+.erow .k{font:16px/1 var(--mono);align-self:center}
+.erow .v{font:32px/1 var(--mono);font-variant-numeric:tabular-nums;align-self:center}
+.erow .d{align-self:center}
+.erow.gone{
+  color:var(--dead);
+  background-image:repeating-linear-gradient(45deg,transparent 0 9px,var(--hatch) 9px 18px);
+}
+.erow.gone .k{text-decoration:line-through}
+.erow.gone .v{color:var(--dead)}
+.erow.dim{color:var(--muted)}
+.erow.dim .v{color:var(--muted)}
+.delta{
+  border:1px solid var(--structural);padding:4px 10px;
+  font:16px/1.2 var(--mono);font-variant-numeric:tabular-nums;color:var(--ink);
+  min-width:74px;text-align:center;
+}
+.delta.zero{color:var(--muted)}
+.delta.minus{border-color:var(--dead);color:var(--dead)}
+.delta.plus{border-color:var(--ink)}
+.stamp{margin-top:10px}
+.stamp .plc{border-color:var(--muted);color:var(--ink)}
+
+/* ══ AUDIT DRAWER ═══════════════════════════════════════════════════════ */
+.drawer{
+  position:fixed;left:0;right:0;bottom:0;background:var(--panel);
+  border-top:2px solid var(--structural);z-index:40;
+  display:flex;flex-direction:column;max-height:min(72vh,640px);
+}
+.drawer .bar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;padding:12px 22px}
+.drawer .bar .t{font:12px/1 var(--mono);text-transform:uppercase;letter-spacing:.2em}
+.drawer .bar .grow{flex:1 1 auto}
+.integ{border:1px solid var(--structural);padding:4px 9px;font:13px/1.2 var(--mono)}
+.integ.bad{background:var(--deny);color:var(--deny-ink);border-color:var(--deny)}
+.drawer .body{display:none;overflow:auto;padding:0 22px 20px;border-top:1px solid var(--structural)}
+.drawer.open .body{display:block}
+.integ-err{
+  margin:14px 0 0;padding:11px 13px;border:2px solid var(--deny);color:var(--ink);
+  font:16px/1.45 var(--mono);word-break:break-word;
+}
+table.chain{border-collapse:collapse;width:100%;margin-top:14px}
+table.chain th{
+  text-align:left;font:12px/1 var(--mono);text-transform:uppercase;letter-spacing:.2em;
+  color:var(--muted);padding:8px 12px 8px 0;border-bottom:1px solid var(--structural);font-weight:400;
+}
+table.chain td{padding:9px 12px 9px 0;border-bottom:1px solid var(--structural);font:14px/1.4 var(--mono);vertical-align:top}
+table.chain td.o-allow{color:var(--allow)}
+table.chain td.o-deny{color:var(--deny)}
+.link{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.link .r{width:22px;height:2px;background:var(--structural);flex:none}
+.link .r.broken{background:repeating-linear-gradient(90deg,var(--deny) 0 4px,transparent 4px 8px)}
+
+/* ══ POLICY OVERLAY ═════════════════════════════════════════════════════ */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:60;display:none}
+.overlay.on{display:block}
+.sheet{
+  position:absolute;top:0;right:0;bottom:0;width:min(760px,94vw);
+  background:var(--panel);border-left:2px solid var(--structural);
+  display:flex;flex-direction:column;
+}
+.sheet .h{display:flex;gap:14px;align-items:center;padding:14px 20px;border-bottom:2px solid var(--structural)}
+.sheet .h .t{font:800 18px/1.2 var(--sans);text-transform:uppercase;letter-spacing:-.02em}
+.sheet pre{margin:0;padding:18px 20px;overflow:auto;font:15px/1.62 var(--mono);flex:1 1 auto}
+.sheet pre .hit{display:block;background:var(--shade);box-shadow:-8px 0 0 0 var(--approval);margin-left:8px;padding-left:4px}
+#sheet-note{padding:12px 20px;border-bottom:1px solid var(--structural);font:15px/1.45 var(--mono);color:var(--ink);background:var(--shade)}
+#sheet-note .plc{margin-right:10px}
+
+/* ══ RESPONSIVE ═════════════════════════════════════════════════════════ */
+@media (max-width:1100px){
+  .callgrid{grid-template-columns:1fr 1fr;gap:18px}
+  .runcol{grid-column:1 / -1}
+}
+@media (max-width:900px){
+  .split{grid-template-columns:minmax(0,1fr)}
+  .divider{display:none}
+  .lane,.estate{border-left:3px solid var(--structural)}
+  .lane{border-top:2px solid var(--structural)}
+  .callgrid{grid-template-columns:1fr}
+  .channel{height:220px;--gate-top:100px}
+}
+@media (prefers-reduced-motion:reduce){
+  .token,.half,.lever::after{transition:none!important}
+  .gate.thump{animation:none!important}
+}
+</style>
+</head>
+<body>
+
+<header class="rail">
+  <h1>Interlock</h1>
+  <span class="sub">Agent Governance Toolkit 4.1.0 &middot; every verdict on this page is returned by AGT&rsquo;s policy engine</span>
+  <span class="right">
+    <span class="plc" id="hostplc">127.0.0.1:8765</span>
+    <button type="button" class="ghost" id="themebtn" aria-pressed="false">Dark</button>
+  </span>
+</header>
+
+<div id="alert" role="alert">
+  <div class="t" id="alert-t">Cannot reach the governance server</div>
+  <div class="m" id="alert-m"></div>
+</div>
+
+<!-- ══ BAND 1 — THE CALL ═══════════════════════════════════════════════ -->
+<section class="band-call">
+  <div class="chips" id="chips">
+    <span class="plc">Scenario</span>
+  </div>
+
+  <form class="callgrid" id="callform">
+    <div>
+      <fieldset>
+        <legend class="plc">Agent &middot; <span class="path">agent_id</span></legend>
+        <div class="pick" id="agents"></div>
+      </fieldset>
+      <fieldset style="margin-top:14px">
+        <legend class="plc">Tool</legend>
+        <div class="pick" id="tools"></div>
+      </fieldset>
+    </div>
+
+    <fieldset>
+      <legend class="plc">Arguments &middot; <span class="path">args</span></legend>
+      <div class="args" id="args"></div>
+    </fieldset>
+
+    <div class="runcol">
+      <button type="submit" class="run" id="runboth">Run both paths</button>
+      <button type="button" class="run2" id="rungov">Run governed only &mdash; keeps the audit chain</button>
+      <button type="button" class="run2" id="resetbtn">Reset the estate</button>
+      <div class="tally">
+        <span class="plc">Stopped at the gate &middot; <b class="num" id="tally-deny">0</b></span>
+        <span class="plc">Held for a human &middot; <b class="num" id="tally-hold">0</b></span>
+      </div>
+      <p class="path" style="margin:2px 0 0">Run both paths resets the estate before each lane, so the two
+      readings below start from the same numbers. It restarts the audit chain; run governed only to grow it.</p>
+    </div>
+  </form>
+</section>
+
+<!-- ══ BAND 2 + 3 — THE TWO LANES, THE ESTATE ══════════════════════════ -->
+<div class="split">
+  <section class="lane" id="lane-u" aria-labelledby="hd-u">
+    <h2 id="hd-u"><span class="w">tools.</span><span id="hd-u-tool">db_query</span><span class="w">(&hellip;)</span></h2>
+    <div class="eyebrow"><span class="plc">Ungoverned</span></div>
+    <div class="channel" id="ch-u" data-run="idle">
+      <div class="token" id="tok-u">db_query</div>
+      <div class="gaterow"><div class="nocontrol">No control surface</div></div>
+    </div>
+    <div class="outcome" id="out-u" aria-live="polite"></div>
+    <details class="raw" id="raw-u" hidden><summary>Raw response &middot; POST /api/call</summary><pre></pre></details>
+  </section>
+
+  <div class="divider" aria-hidden="true"></div>
+
+  <section class="lane" id="lane-g" aria-labelledby="hd-g">
+    <h2 id="hd-g"><span class="w">govern(</span>tools.<span id="hd-g-tool">db_query</span><span class="w">, policy=</span><span id="hd-g-pol">&hellip;</span><span class="w">, agent_id=</span><span id="hd-g-agent">&hellip;</span><span class="w">)</span></h2>
+    <div class="eyebrow"><span class="plc">Governed</span></div>
+    <div class="channel" id="ch-g" data-run="idle">
+      <div class="token" id="tok-g">db_query</div>
+      <div class="gaterow">
+        <div class="gate" id="gate" data-state="dark">
+          <div class="half l"><span class="bolt"></span></div>
+          <div class="half r"><span class="bolt"></span></div>
+        </div>
+      </div>
+    </div>
+    <div class="outcome" id="out-g" aria-live="polite"></div>
+    <details class="raw" id="raw-g" hidden><summary>Raw response &middot; POST /api/call</summary><pre></pre></details>
+  </section>
+
+  <section class="estate" id="est-u">
+    <div class="head"><span class="plc" id="est-u-head">Estate at rest</span><span class="path" id="est-u-src">GET /api/state</span></div>
+    <div class="body" id="est-u-rows"></div>
+    <div class="stamp" id="est-u-stamp"></div>
+  </section>
+
+  <section class="estate" id="est-g">
+    <div class="head"><span class="plc" id="est-g-head">Estate at rest</span><span class="path" id="est-g-src">GET /api/state</span></div>
+    <div class="body" id="est-g-rows"></div>
+    <div class="stamp" id="est-g-stamp"></div>
+  </section>
+</div>
+
+<!-- ══ AUDIT DRAWER ════════════════════════════════════════════════════ -->
+<div class="drawer" id="drawer">
+  <div class="bar">
+    <button type="button" class="ghost" id="drawerbtn" aria-expanded="false" aria-controls="drawerbody">Audit chain</button>
+    <span class="t"><span class="num" id="chain-n">0</span> entries</span>
+    <span class="integ" id="chain-integ">integrity &mdash;</span>
+    <span class="path">audit.entryHash &rarr; audit.previousHash</span>
+    <span class="grow"></span>
+    <button type="button" class="ghost" id="forgebtn">Forge entry 0</button>
+    <button type="button" class="ghost" id="refreshaudit">Reload</button>
+  </div>
+  <div class="body" id="drawerbody"></div>
+</div>
+
+<!-- ══ POLICY SHEET ════════════════════════════════════════════════════ -->
+<div class="overlay" id="overlay">
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-t">
+    <div class="h">
+      <span class="t" id="sheet-t">Policy</span>
+      <span class="path" id="sheet-src">GET /api/policy</span>
+      <span style="flex:1"></span>
+      <button type="button" class="ghost" id="sheetclose">Close</button>
+    </div>
+    <div id="sheet-note" hidden></div>
+    <pre id="sheet-pre"></pre>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* ────────────────────────────────────────────────────────────────────────
+   No verdict is ever computed here. This file contains no map from rule
+   names to outcomes, no cached decision and no fallback verdict. Every
+   ALLOWED / BLOCKED / HELD on the page is read straight out of a response
+   from AGT's policy engine. A failed request renders NO VERDICT, which is
+   deliberately neither red nor shaped like a denial.
+   ──────────────────────────────────────────────────────────────────────── */
+
+var GATE_TOP = 126, GATE_TOP_SM = 100, CH_H = 252, CH_H_SM = 220;
+var FALL_MS = 320;
+
+var S = {
+  state: null,        /* GET /api/state */
+  agent: null,        /* selected agent object */
+  tool: null,         /* selected tool object */
+  values: {},         /* per-tool arg values, keyed tool -> {arg: value} */
+  gen: 0,             /* animation generation, cancels stale timers */
+  denies: 0,
+  holds: 0,
+  busy: false
+};
+
+var $ = function (id) { return document.getElementById(id); };
+function el(tag, cls, txt) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (txt !== undefined && txt !== null) n.textContent = String(txt);
+  return n;
+}
+function fmt(n) {
+  if (typeof n !== "number" || !isFinite(n)) return String(n);
+  return n.toLocaleString("en-US");
+}
+function reduced() {
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+}
+function small() { return window.matchMedia("(max-width: 900px)").matches; }
+
+/* ══ TRANSPORT ═════════════════════════════════════════════════════════
+   Every failure becomes an Error carrying the server's own message, or a
+   plain description of why the request never got there. Nothing is
+   swallowed, and nothing is substituted for a missing answer.            */
+function api(path, opts) {
+  var res;
+  return fetch(path, opts).then(function (r) {
+    res = r;
+    return r.text();
+  }).catch(function (e) {
+    throw new Error("cannot reach " + path + " — " + (e && e.message ? e.message : e) +
+      ". Start the console with: python ui/server.py");
+  }).then(function (text) {
+    var body;
+    try { body = JSON.parse(text); }
+    catch (e) {
+      throw new Error(path + " returned HTTP " + res.status + " and the body was not JSON: " +
+        text.slice(0, 240));
+    }
+    if (!res.ok || (body && body.error)) {
+      throw new Error((body && body.error) ? body.error : ("HTTP " + res.status + " from " + path));
+    }
+    return body;
+  });
+}
+function post(path, payload) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload === undefined ? {} : payload)
+  });
+}
+
+function alertOn(title, msg) {
+  $("alert").classList.add("on");
+  $("alert-t").textContent = title;
+  $("alert-m").textContent = msg;
+}
+function alertOff() { $("alert").classList.remove("on"); }
+
+/* ══ SCENARIOS — the demo's own strings, verbatim from demo.py ═════════ */
+var SCENARIOS = [
+  { label: "disguised DROP", tool: "db_query",
+    args: { sql: '/* nightly cleanup */ dRoP   TaBLE  "customers"' } },
+  { label: "SELECT containing 'drop'", tool: "db_query",
+    args: { sql: "SELECT id FROM tickets WHERE subject = 'drop shipment delayed'" } },
+  { label: "12,000 PII rows → s3://partner-bucket", tool: "export_dataset",
+    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: true } },
+  { label: "same export, anonymised", tool: "export_dataset",
+    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: false } },
+  { label: "one customer reply", tool: "send_email",
+    args: { to: "ana@example.com", recipients: 1, body: "…" } },
+  { label: "200-person maintenance notice", tool: "send_email",
+    args: { to: "status@example.com", recipients: 200, body: "…" } },
+  { label: "40,000-person campaign", tool: "send_email",
+    args: { to: "all-users@example.com", recipients: 40000, body: "…" } },
+  { label: "the same reply, as Atlas", tool: "send_email", agentIndex: 1,
+    args: { to: "ana@example.com", recipients: 1, body: "…" } }
+];
+
+/* ══ BOOT ══════════════════════════════════════════════════════════════ */
+function boot() {
+  api("/api/state").then(function (st) {
+    alertOff();
+    S.state = st;
+    buildAgents();
+    buildTools();
+    buildChips();
+    selectTool((st.tools && st.tools[0]) ? st.tools[0].name : null);
+    renderIdleEstate();
+    loadAudit();
+  }).catch(function (e) {
+    alertOn("The console has no state to show", e.message);
+    renderIdleEstate();
+    $("runboth").disabled = true;
+    $("rungov").disabled = true;
+    $("resetbtn").disabled = true;
+  });
+}
+
+function buildAgents() {
+  var box = $("agents"); box.innerHTML = "";
+  (S.state.agents || []).forEach(function (a, i) {
+    var lab = el("label");
+    var inp = el("input"); inp.type = "radio"; inp.name = "agent"; inp.value = a.id;
+    if (i === 0) { inp.checked = true; S.agent = a; }
+    inp.addEventListener("change", function () { S.agent = a; syncHeaders(); });
+    var mark = el("span", "mark");
+    var wrap = el("span");
+    wrap.appendChild(el("span", "nm", a.label));
+    wrap.appendChild(el("span", "id", a.id + " · " + a.policy));
+    lab.appendChild(inp); lab.appendChild(mark); lab.appendChild(wrap);
+    box.appendChild(lab);
+  });
+}
+
+function buildTools() {
+  var box = $("tools"); box.innerHTML = "";
+  (S.state.tools || []).forEach(function (t, i) {
+    var lab = el("label");
+    var inp = el("input"); inp.type = "radio"; inp.name = "tool"; inp.value = t.name;
+    if (i === 0) inp.checked = true;
+    inp.addEventListener("change", function () { selectTool(t.name); });
+    var mark = el("span", "mark");
+    lab.appendChild(inp); lab.appendChild(mark); lab.appendChild(el("span", "nm", t.name));
+    box.appendChild(lab);
+  });
+}
+
+function buildChips() {
+  var box = $("chips");
+  SCENARIOS.forEach(function (sc) {
+    if (!toolByName(sc.tool)) return;   /* only offer what the server declares */
+    var b = el("button", "chip"); b.type = "button";
+    b.appendChild(document.createTextNode(sc.label));
+    if (sc.agentIndex !== undefined && S.state.agents && S.state.agents[sc.agentIndex]) {
+      var w = el("span", "who", "  " + S.state.agents[sc.agentIndex].label);
+      b.appendChild(w);
+    }
+    b.addEventListener("click", function () { applyScenario(sc); });
+    box.appendChild(b);
+  });
+}
+
+function toolByName(name) {
+  var list = (S.state && S.state.tools) || [];
+  for (var i = 0; i < list.length; i++) if (list[i].name === name) return list[i];
+  return null;
+}
+
+function applyScenario(sc) {
+  if (sc.agentIndex !== undefined && S.state.agents && S.state.agents[sc.agentIndex]) {
+    var a = S.state.agents[sc.agentIndex];
+    var radios = document.querySelectorAll('input[name="agent"]');
+    for (var i = 0; i < radios.length; i++) {
+      if (radios[i].value === a.id) { radios[i].checked = true; S.agent = a; }
+    }
+  }
+  var tRadios = document.querySelectorAll('input[name="tool"]');
+  for (var j = 0; j < tRadios.length; j++) tRadios[j].checked = (tRadios[j].value === sc.tool);
+  S.values[sc.tool] = Object.assign({}, S.values[sc.tool] || {}, sc.args);
+  selectTool(sc.tool);
+}
+
+/* seed a tool's fields from the first scenario that uses it, so a presenter
+   never faces an empty form */
+function seedFor(tool) {
+  var seed = {};
+  for (var i = 0; i < SCENARIOS.length; i++) {
+    if (SCENARIOS[i].tool === tool.name) { seed = SCENARIOS[i].args; break; }
+  }
+  var out = {};
+  (tool.args || []).forEach(function (a) {
+    if (Object.prototype.hasOwnProperty.call(seed, a.name)) out[a.name] = seed[a.name];
+    else if (a.type === "int") out[a.name] = 1;
+    else if (a.type === "bool") out[a.name] = false;
+    else out[a.name] = "";
+  });
+  return out;
+}
+
+function selectTool(name) {
+  var t = toolByName(name);
+  if (!t) return;
+  S.tool = t;
+  if (!S.values[t.name]) S.values[t.name] = seedFor(t);
+  buildArgs();
+  syncHeaders();
+}
+
+function stepFor(v) {
+  var n = Math.abs(Number(v) || 0);
+  if (n >= 10000) return 5000;
+  if (n >= 1000) return 1000;
+  if (n >= 100) return 50;
+  return 1;
+}
+
+function buildArgs() {
+  var box = $("args"); box.innerHTML = "";
+  var vals = S.values[S.tool.name];
+  (S.tool.args || []).forEach(function (a) {
+    var wrap = el("div", "arg");
+    var lab = el("div", "lab");
+    var id = "arg-" + a.name;
+    var nm = el("label", "n", (a.label || a.name)); nm.setAttribute("for", id);
+    lab.appendChild(nm);
+    lab.appendChild(el("span", "path", "args." + a.name + " · " + a.type));
+    wrap.appendChild(lab);
+
+    if (a.type === "sql") {
+      var ta = el("textarea"); ta.id = id; ta.rows = 2; ta.spellcheck = false;
+      ta.value = vals[a.name] === undefined ? "" : String(vals[a.name]);
+      ta.addEventListener("input", function () { vals[a.name] = ta.value; });
+      wrap.appendChild(ta);
+    } else if (a.type === "int") {
+      var st = el("div", "stepper");
+      var minus = el("button", null, "−"); minus.type = "button";
+      minus.setAttribute("aria-label", "Decrease " + a.name);
+      var inp = el("input"); inp.type = "number"; inp.id = id; inp.min = "0";
+      inp.inputMode = "numeric";
+      inp.value = String(Number(vals[a.name]) || 0);
+      var plus = el("button", null, "+"); plus.type = "button";
+      plus.setAttribute("aria-label", "Increase " + a.name);
+      var stepTag = el("span", "plc"); stepTag.style.alignSelf = "center";
+      stepTag.style.marginLeft = "10px";
+      function syncStep() { stepTag.textContent = "step ±" + fmt(stepFor(inp.value)); }
+      function bump(dir) {
+        var cur = Number(inp.value) || 0;
+        var next = Math.max(0, cur + dir * stepFor(cur));
+        inp.value = String(next); vals[a.name] = next; syncStep();
+      }
+      minus.addEventListener("click", function () { bump(-1); });
+      plus.addEventListener("click", function () { bump(1); });
+      inp.addEventListener("input", function () {
+        vals[a.name] = Number(inp.value) || 0; syncStep();
+      });
+      syncStep();
+      st.appendChild(minus); st.appendChild(inp); st.appendChild(plus);
+      var row = el("div"); row.style.display = "flex"; row.style.alignItems = "center";
+      row.appendChild(st); row.appendChild(stepTag);
+      wrap.appendChild(row);
+    } else if (a.type === "bool") {
+      var tg = el("label", "toggle");
+      var cb = el("input"); cb.type = "checkbox"; cb.id = id;
+      cb.checked = !!vals[a.name];
+      var lever = el("span", "lever");
+      var state = el("span", "state", cb.checked ? "true" : "false");
+      cb.addEventListener("change", function () {
+        vals[a.name] = cb.checked; state.textContent = cb.checked ? "true" : "false";
+      });
+      tg.appendChild(cb); tg.appendChild(lever); tg.appendChild(state);
+      nm.setAttribute("for", id);
+      wrap.appendChild(tg);
+    } else {
+      var ip = el("input"); ip.type = "text"; ip.id = id; ip.spellcheck = false;
+      ip.value = vals[a.name] === undefined ? "" : String(vals[a.name]);
+      ip.addEventListener("input", function () { vals[a.name] = ip.value; });
+      wrap.appendChild(ip);
+    }
+    box.appendChild(wrap);
+  });
+}
+
+function syncHeaders() {
+  var tn = S.tool ? S.tool.name : "…";
+  $("hd-u-tool").textContent = tn;
+  $("hd-g-tool").textContent = tn;
+  $("hd-g-pol").textContent = S.agent ? S.agent.policy : "…";
+  $("hd-g-agent").textContent = S.agent ? S.agent.id.replace("did:mesh:", "") : "…";
+  $("tok-u").textContent = tn;
+  $("tok-g").textContent = tn;
+}
+
+/* ══ THE RUN ═══════════════════════════════════════════════════════════
+   Run both paths:  reset → ungoverned → reset → governed.
+   The reset between the lanes is the point. tools.TABLES / OUTBOX /
+   EXPORTS are module globals shared by both calls, so without it the
+   second lane would be reading an estate the first lane had already
+   mutated, and the two aligned columns below would compare a stale
+   number to a fresh one. Both lanes start from the same baseline, and
+   the baseline itself is the real response to /api/reset.
+   The governed call runs last so its entry survives in the audit chain.  */
+function currentArgs() {
+  var vals = S.values[S.tool.name] || {};
+  var out = {};
+  (S.tool.args || []).forEach(function (a) {
+    var v = vals[a.name];
+    if (a.type === "int") out[a.name] = Number(v) || 0;
+    else if (a.type === "bool") out[a.name] = !!v;
+    else out[a.name] = v === undefined ? "" : String(v);
+  });
+  return out;
+}
+
+function setBusy(on) {
+  S.busy = on;
+  $("runboth").disabled = on;
+  $("rungov").disabled = on;
+  $("resetbtn").disabled = on;
+  $("runboth").textContent = on ? "Running…" : "Run both paths";
+}
+
+function callBody(governed) {
+  return {
+    agent: S.agent ? S.agent.id : null,
+    tool: S.tool ? S.tool.name : null,
+    args: currentArgs(),
+    governed: governed
+  };
+}
+
+function runBoth() {
+  if (S.busy || !S.tool || !S.agent) return;
+  var gen = ++S.gen;
+  setBusy(true);
+  armChannels();
+  var baseline = null, u = null, g = null, uErr = null, gErr = null, fatal = null;
+
+  post("/api/reset").then(function (b) {
+    baseline = b; alertOff();
+    return post("/api/call", callBody(false)).then(function (r) { u = r; },
+                                                  function (e) { uErr = e; });
+  }).then(function () {
+    return post("/api/reset").catch(function (e) { throw e; });
+  }).then(function () {
+    return post("/api/call", callBody(true)).then(function (r) { g = r; },
+                                                  function (e) { gErr = e; });
+  }).catch(function (e) {
+    fatal = e;
+  }).then(function () {
+    if (gen !== S.gen) return;
+    setBusy(false);
+    if (fatal) {
+      alertOn("The run could not complete", fatal.message);
+      paintLane("u", { err: fatal.message }, baseline);
+      paintLane("g", { err: fatal.message }, baseline);
+      play(gen, null, null);
+      return;
+    }
+    if (uErr) alertOn("The ungoverned call failed", uErr.message);
+    if (gErr) alertOn("The governed call failed", gErr.message);
+    if (!uErr && !gErr) alertOff();
+    paintLane("u", uErr ? { err: uErr.message } : { r: u }, baseline);
+    paintLane("g", gErr ? { err: gErr.message } : { r: g }, baseline);
+    play(gen, uErr ? null : u, gErr ? null : g);
+    loadAudit();
+  });
+}
+
+/* Governed only: no reset, so the estate and the hash chain both carry on
+   across a walk through the scenario chips. The ungoverned lane says it did
+   not run rather than showing a stale reading dressed as a result.        */
+function runGoverned() {
+  if (S.busy || !S.tool || !S.agent) return;
+  var gen = ++S.gen;
+  setBusy(true);
+  armChannels();
+  var baseline = null, g = null, gErr = null, fatal = null;
+
+  api("/api/state").then(function (b) {
+    baseline = b; alertOff();
+    return post("/api/call", callBody(true)).then(function (r) { g = r; },
+                                                  function (e) { gErr = e; });
+  }).catch(function (e) { fatal = e; }).then(function () {
+    if (gen !== S.gen) return;
+    setBusy(false);
+    if (fatal) {
+      alertOn("The run could not complete", fatal.message);
+      paintLane("g", { err: fatal.message }, baseline);
+      paintLane("u", { skipped: true }, baseline);
+      play(gen, null, null);
+      return;
+    }
+    if (gErr) alertOn("The governed call failed", gErr.message); else alertOff();
+    paintLane("u", { skipped: true }, baseline);
+    paintLane("g", gErr ? { err: gErr.message } : { r: g }, baseline);
+    play(gen, null, gErr ? null : g, true);
+    loadAudit();
+  });
+}
+
+function doReset() {
+  if (S.busy) return;
+  setBusy(true);
+  post("/api/reset").then(function (st) {
+    alertOff();
+    S.state = Object.assign({}, S.state, st);
+    renderIdleEstate();
+    clearLanes();
+    loadAudit();
+  }).catch(function (e) {
+    alertOn("The estate was not reset", e.message);
+  }).then(function () { setBusy(false); });
+}
+
+/* ══ CHANNEL CHOREOGRAPHY ══════════════════════════════════════════════ */
+function gateTop() { return small() ? GATE_TOP_SM : GATE_TOP; }
+function chH() { return small() ? CH_H_SM : CH_H; }
+
+function setToken(id, y) {
+  $(id).style.transform = "translate(-50%, " + y + "px)";
+}
+function armChannels() {
+  $("ch-u").dataset.run = "run";
+  $("ch-g").dataset.run = "run";
+  var gate = $("gate");
+  gate.dataset.state = "dark";
+  gate.classList.remove("thump");
+  var ap = gate.querySelector(".approver");
+  if (ap) ap.remove();
+  setToken("tok-u", 8);
+  setToken("tok-g", 8);
+  $("out-u").innerHTML = "";
+  $("out-g").innerHTML = "";
+  $("out-u").appendChild(el("span", "plc", "Calling the tool…"));
+  $("out-g").appendChild(el("span", "plc", "Asking the policy engine…"));
+  $("raw-u").hidden = true;
+  $("raw-g").hidden = true;
+}
+function clearLanes() {
+  $("ch-u").dataset.run = "idle";
+  $("ch-g").dataset.run = "idle";
+  $("gate").dataset.state = "dark";
+  setToken("tok-u", 8);
+  setToken("tok-g", 8);
+  $("out-u").innerHTML = "";
+  $("out-g").innerHTML = "";
+  $("raw-u").hidden = true;
+  $("raw-g").hidden = true;
+}
+
+function play(gen, u, g, govOnly) {
+  var stopY = gateTop() - 40;
+  var throughY = chH() - 44;
+  var gate = $("gate");
+  var motion = !reduced();
+
+  function later(ms, fn) {
+    if (!motion) { if (gen === S.gen) fn(); return; }
+    setTimeout(function () { if (gen === S.gen) fn(); }, ms);
+  }
+
+  /* phase 1 — lockstep */
+  if (motion) {
+    if (!govOnly) setToken("tok-u", stopY);
+    setToken("tok-g", stopY);
+  } else {
+    if (!govOnly) setToken("tok-u", throughY);
+    setToken("tok-g", stopY);
+  }
+
+  later(motion ? FALL_MS : 0, function () {
+    /* right lane — the gate does whatever the engine said */
+    if (!g) {
+      gate.dataset.state = "unlit";
+    } else if (g.approval && g.approval.requested) {
+      gate.dataset.state = "held";
+      var chip = el("div", "approver", "approver · " + (g.approval.approver || "—"));
+      gate.appendChild(chip);
+      later(760, function () {
+        var ok = (g.allowed === true);
+        gate.dataset.state = ok ? "open" : "shut";
+        if (!ok) thump(gate);
+        if (ok) later(motion ? 220 : 0, function () { setToken("tok-g", throughY); });
+      });
+    } else if (g.allowed === true) {
+      gate.dataset.state = "open";
+      later(motion ? 200 : 0, function () { setToken("tok-g", throughY); });
+    } else {
+      gate.dataset.state = "shut";
+      thump(gate);
+    }
+
+    /* left lane — nothing intervenes */
+    if (!govOnly && motion) setToken("tok-u", throughY);
+    if (!govOnly) later(motion ? 260 : 0, function () { animateEstate("u"); });
+    later(motion ? 300 : 0, function () { animateEstate("g"); });
+  });
+
+  function thump(node) {
+    if (!motion) return;
+    node.classList.remove("thump");
+    void node.offsetWidth;
+    node.classList.add("thump");
+  }
+}
+
+/* ══ LANE PLACARDS ═════════════════════════════════════════════════════ */
+var PENDING = { u: null, g: null };
+
+function paintLane(side, payload, baseline) {
+  var box = $(side === "u" ? "out-u" : "out-g");
+  var rawBox = $(side === "u" ? "raw-u" : "raw-g");
+  box.innerHTML = "";
+  PENDING[side] = null;
+
+  if (payload.skipped) {
+    $("ch-u").dataset.run = "idle";
+    box.appendChild(verdictNode("plain", "Not run"));
+    box.appendChild(rowsNode([["This run", "governed path only — the ungoverned lane was not called, so nothing is shown for it", null]]));
+    setEstateIdle(side, "Not run this press", true);
+    return;
+  }
+  if (payload.err) {
+    box.appendChild(verdictNode("novrd", "No verdict"));
+    var d = rowsNode([["Error", payload.err, "response.error"]]);
+    box.appendChild(d);
+    var note = el("p", "path", "The engine did not answer. This is not a decision, and it is not shown as one.");
+    note.style.marginBottom = "0";
+    box.appendChild(note);
+    setEstateIdle(side, "No reading", true);
+    return;
+  }
+
+  var r = payload.r || {};
+  var kind, label;
+  if (side === "u") {
+    kind = "plain";
+    label = "Tool executed";
+  } else if (r.approval && r.approval.requested) {
+    if (r.allowed === true) { kind = "hold"; label = "Held → approved"; }
+    else { kind = "hold"; label = "Held → rejected"; }
+  } else if (r.allowed === true) {
+    kind = "allow"; label = "Allowed";
+  } else {
+    kind = "deny"; label = "Blocked";
+  }
+  box.appendChild(verdictNode(kind, label));
+
+  var rows = [];
+  if (side === "g") {
+    rows.push(["Verdict", r.verdict === undefined || r.verdict === null ? "—" : String(r.verdict), "response.verdict"]);
+    rows.push(["Matched rule", r.matchedRule ? r.matchedRule : "no matching rule — the policy default applied", "decision.matched_rule"]);
+    rows.push(["Policy", r.policyName || "—", "decision.policy_name", r.policyName ? "policy" : null]);
+    rows.push(["Reason", r.reason === undefined || r.reason === null ? "—" : String(r.reason), "decision.reason", null, true]);
+    if (r.approval && r.approval.requested) {
+      rows.push(["Approver", (r.approval.approver || "—") + " · approved=" + String(r.approval.approved),
+                 "decision.approval"]);
+      if (r.approval.reason) rows.push(["Approver said", String(r.approval.reason), "decision.approval.reason"]);
+    }
+    rows.push(["Elapsed", (typeof r.evaluationMs === "number" ? r.evaluationMs + " ms" : "—"), "decision.evaluation_ms"]);
+    if (r.audit) {
+      rows.push(["Audit entry", (r.audit.entryId || "—") + " · " + shortHash(r.audit.hash), "audit.entryHash"]);
+    }
+    rows.push(["Reached the tool", r.result ? "yes" : "no", "response.result"]);
+  } else {
+    rows.push(["Governance", "none — govern() was not in the call path", "request.governed=false"]);
+    rows.push(["Result", r.result ? JSON.stringify(r.result) : "—", "response.result", null, true]);
+  }
+  box.appendChild(rowsNode(rows));
+
+  if (side === "g") {
+    var fx = flatten(r.facets);
+    var strip = el("div", "facets");
+    strip.appendChild(el("span", "plc", "Facets"));
+    if (fx.length === 0) {
+      strip.appendChild(el("span", "path", "decision.facets — none returned"));
+    } else {
+      fx.forEach(function (p) {
+        var c = el("span", "facet");
+        var b = el("b", null, p[0] + "=");
+        c.appendChild(b);
+        c.appendChild(document.createTextNode(p[1]));
+        strip.appendChild(c);
+      });
+      strip.appendChild(el("span", "path", "decision.facets"));
+    }
+    box.appendChild(strip);
+  }
+
+  rawBox.hidden = false;
+  rawBox.querySelector("pre").textContent = JSON.stringify(r, null, 2);
+
+  /* estate is painted now, its digits rolled when the token lands */
+  PENDING[side] = { r: r, baseline: baseline };
+  setEstateFrom(side, r, baseline, !reduced());
+
+  if (side === "g") {
+    if (kind === "deny") { S.denies++; $("tally-deny").textContent = fmt(S.denies); }
+    if (r.approval && r.approval.requested) { S.holds++; $("tally-hold").textContent = fmt(S.holds); }
+  }
+}
+
+function shortHash(h) {
+  if (!h) return "—";
+  return String(h).slice(0, 12) + "…";
+}
+
+function verdictNode(kind, label) {
+  var v = el("strong", "verdict " + kind, label);
+  return v;
+}
+
+function rowsNode(rows) {
+  var dl = el("dl", "rows");
+  rows.forEach(function (row) {
+    var dt = el("dt");
+    var plc = el("span", "plc", row[0]);
+    dt.appendChild(plc);
+    var path = el("div", "path", row[2] || "");
+    path.style.marginTop = "3px";
+    dt.appendChild(path);
+    var dd = el("dd", row[4] ? "reason" : null);
+    if (row[3] === "policy") {
+      var b = el("button", "linkish", row[1]);
+      b.type = "button";
+      b.addEventListener("click", openPolicy);
+      dd.appendChild(b);
+    } else {
+      dd.textContent = row[1];
+    }
+    dl.appendChild(dt); dl.appendChild(dd);
+  });
+  return dl;
+}
+
+function flatten(obj, prefix, out) {
+  out = out || []; prefix = prefix || "";
+  if (obj === null || typeof obj !== "object") return out;
+  Object.keys(obj).forEach(function (k) {
+    var v = obj[k], p = prefix ? prefix + "." + k : k;
+    if (v !== null && typeof v === "object" && !Array.isArray(v)) flatten(v, p, out);
+    else out.push([p, Array.isArray(v) ? v.join(",") : String(v)]);
+  });
+  return out;
+}
+
+/* ══ THE ESTATE ════════════════════════════════════════════════════════ */
+function estateKeys() {
+  var t = (S.state && S.state.tables) ? Object.keys(S.state.tables) : ["customers", "tickets", "invoices"];
+  return t;
+}
+
+function renderIdleEstate() {
+  ["u", "g"].forEach(function (side) { setEstateIdle(side, "Waiting for a run"); });
+}
+
+function setEstateHead(side, label, src) {
+  $(side === "u" ? "est-u-head" : "est-g-head").textContent = label;
+  $(side === "u" ? "est-u-src" : "est-g-src").textContent = src;
+}
+
+/* `blank` means: this lane has no reading, so it shows no numbers. The
+   alternative — leaving the last known figures up under a heading that
+   claims they describe this run — would be a quiet lie. */
+function setEstateIdle(side, note, blank) {
+  var box = $(side === "u" ? "est-u-rows" : "est-g-rows");
+  var stamp = $(side === "u" ? "est-u-stamp" : "est-g-stamp");
+  box.innerHTML = ""; stamp.innerHTML = "";
+  setEstateHead(side, blank ? "No reading for this lane" : "Estate at rest",
+                blank ? "nothing to read" : "GET /api/state");
+  var base = (S.state && S.state.tables) ? S.state.tables : {};
+  estateKeys().forEach(function (k) {
+    box.appendChild(estateRow(k, blank ? null : base[k], null, "dim"));
+  });
+  box.appendChild(estateRow("outbox", (blank || !S.state) ? null : S.state.outbox, null, "dim"));
+  box.appendChild(estateRow("exports", (blank || !S.state) ? null : S.state.exports, null, "dim"));
+  stamp.appendChild(el("span", "plc", note));
+}
+
+function estateRow(key, value, delta, cls) {
+  var row = el("div", "erow" + (cls ? " " + cls : ""));
+  row.dataset.key = key;
+  row.appendChild(el("div", "k", key));
+  var v = el("div", "v num", value === null || value === undefined ? "—" : fmt(value));
+  row.appendChild(v);
+  var d = el("div", "d");
+  if (delta !== null && delta !== undefined) {
+    var sign = delta === 0 ? "±0" : (delta > 0 ? "+" + fmt(delta) : "−" + fmt(Math.abs(delta)));
+    var chip = el("span", "delta " + (delta === 0 ? "zero" : (delta > 0 ? "plus" : "minus")), sign);
+    d.appendChild(chip);
+  }
+  row.appendChild(d);
+  return row;
+}
+
+/* paint from a real response; `animate` rolls the digits */
+function setEstateFrom(side, r, baseline, animate) {
+  var box = $(side === "u" ? "est-u-rows" : "est-g-rows");
+  var stamp = $(side === "u" ? "est-u-stamp" : "est-g-stamp");
+  box.innerHTML = ""; stamp.innerHTML = "";
+  setEstateHead(side, side === "u" ? "Estate after the ungoverned call" : "Estate after the governed call",
+                "response.tables / outbox / exports");
+  var base = (baseline && baseline.tables) ? baseline.tables : ((S.state && S.state.tables) || {});
+  var now = r.tables || {};
+  var keys = Object.keys(base);
+  if (keys.length === 0) keys = estateKeys();
+
+  keys.forEach(function (k) {
+    var had = base[k], has = Object.prototype.hasOwnProperty.call(now, k) ? now[k] : null;
+    if (has === null) {
+      var row = estateRow(k, animate ? had : 0, -(had || 0), "gone");
+      row.dataset.from = String(had || 0);
+      row.dataset.to = "0";
+      box.appendChild(row);
+    } else {
+      box.appendChild(estateRow(k, has, has - (had || 0)));
+    }
+  });
+  var ob = baseline ? baseline.outbox : null, ex = baseline ? baseline.exports : null;
+  box.appendChild(estateRow("outbox", r.outbox, (typeof r.outbox === "number" && typeof ob === "number") ? r.outbox - ob : null));
+  box.appendChild(estateRow("exports", r.exports, (typeof r.exports === "number" && typeof ex === "number") ? r.exports - ex : null));
+
+  var args = currentArgs();
+  if (r.result && args.contains_pii === true) {
+    stamp.appendChild(el("span", "plc", "Contained PII"));
+  } else if (!r.result) {
+    stamp.appendChild(el("span", "plc", "Nothing executed — every counter unchanged"));
+  } else {
+    stamp.appendChild(el("span", "plc", "Tool ran"));
+  }
+}
+
+function animateEstate(side) {
+  var p = PENDING[side];
+  if (!p) return;
+  setEstateFrom(side, p.r, p.baseline, !reduced());
+  if (reduced()) return;
+  var box = $(side === "u" ? "est-u-rows" : "est-g-rows");
+  var gone = box.querySelectorAll(".erow.gone");
+  for (var i = 0; i < gone.length; i++) {
+    (function (row) {
+      var from = Number(row.dataset.from) || 0;
+      roll(row.querySelector(".v"), from, 0, 520);
+    })(gone[i]);
+  }
+}
+
+/* A rolling digit is decoration; the number it lands on is evidence. If the
+   frame loop is throttled (backgrounded tab, projector mirroring) the roll
+   can stall part-way, so a timer always writes the true final value. */
+function roll(node, from, to, ms) {
+  var t0 = null, done = false;
+  function land() { if (!done) { done = true; node.textContent = fmt(to); } }
+  function step(ts) {
+    if (done) return;
+    if (t0 === null) t0 = ts;
+    var k = Math.min(1, (ts - t0) / ms);
+    if (k >= 1) { land(); return; }
+    var eased = 1 - Math.pow(1 - k, 3);
+    node.textContent = fmt(Math.round(from + (to - from) * eased));
+    requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+  setTimeout(land, ms + 120);
+}
+
+/* ══ AUDIT ═════════════════════════════════════════════════════════════ */
+function loadAudit() {
+  return api("/api/audit").then(function (a) {
+    renderAudit(a);
+  }).catch(function (e) {
+    var body = $("drawerbody");
+    body.innerHTML = "";
+    var p = el("div", "integ-err", e.message);
+    p.style.borderColor = "var(--structural)";
+    body.appendChild(p);
+    $("chain-n").textContent = "—";
+    var ig = $("chain-integ");
+    ig.className = "integ"; ig.textContent = "integrity unknown";
+  });
+}
+
+function renderAudit(a) {
+  var entries = a.entries || [];
+  var integ = a.integrity || {};
+  $("chain-n").textContent = fmt(entries.length);
+  var ig = $("chain-integ");
+  if (integ.ok === false) { ig.className = "integ bad"; ig.textContent = "integrity FAILED"; }
+  else if (integ.ok === true) { ig.className = "integ"; ig.textContent = "integrity ok"; }
+  else { ig.className = "integ"; ig.textContent = "integrity —"; }
+
+  var body = $("drawerbody");
+  body.innerHTML = "";
+  if (integ.ok === false) {
+    var errBox = el("div", "integ-err");
+    errBox.appendChild(el("strong", "disp", "Chain verification failed"));
+    errBox.appendChild(document.createElement("br"));
+    errBox.appendChild(document.createTextNode(integ.error || "no error string returned"));
+    var tag = el("div", "path", "integrity.error, verbatim");
+    tag.style.marginTop = "6px";
+    errBox.appendChild(tag);
+    body.appendChild(errBox);
+  }
+  if (entries.length === 0) {
+    var none = el("p", "path", "No entries yet. A governed call writes one; the ungoverned path writes none, which is the point.");
+    body.appendChild(none);
+    return;
+  }
+  var table = el("table", "chain");
+  var thead = el("thead"), trh = el("tr");
+  ["#", "agent", "action", "outcome", "rule", "previousHash → hash", "timestamp"].forEach(function (h) {
+    trh.appendChild(el("th", null, h));
+  });
+  thead.appendChild(trh); table.appendChild(thead);
+  var tb = el("tbody");
+  entries.forEach(function (e) {
+    var tr = el("tr");
+    tr.appendChild(el("td", null, e.index));
+    tr.appendChild(el("td", null, String(e.agent || "—").replace("did:mesh:", "")));
+    tr.appendChild(el("td", null, e.action || "—"));
+    tr.appendChild(el("td", "o-" + (e.outcome || ""), e.outcome || "—"));
+    tr.appendChild(el("td", null, e.rule || "—"));
+    var td = el("td");
+    var lk = el("div", "link");
+    lk.appendChild(el("span", null, shortHash(e.previousHash)));
+    lk.appendChild(el("span", "r" + (integ.ok === false ? " broken" : "")));
+    lk.appendChild(el("span", null, shortHash(e.hash)));
+    td.appendChild(lk);
+    tr.appendChild(td);
+    tr.appendChild(el("td", null, e.timestamp || "—"));
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  body.appendChild(table);
+}
+
+function forge() {
+  post("/api/audit/tamper", { index: 0, outcome: "allow" }).then(function (a) {
+    alertOff();
+    openDrawer(true);
+    renderAudit(a);
+  }).catch(function (e) {
+    alertOn("The entry could not be forged", e.message);
+  });
+}
+
+function openDrawer(force) {
+  var d = $("drawer");
+  var open = force === true ? true : !d.classList.contains("open");
+  d.classList.toggle("open", open);
+  $("drawerbtn").setAttribute("aria-expanded", String(open));
+}
+
+/* ══ POLICY SHEET ══════════════════════════════════════════════════════ */
+var lastFocus = null;
+function openPolicy() {
+  if (!S.agent) return;
+  var name = S.agent.policy;
+  lastFocus = document.activeElement;
+  $("sheet-t").textContent = name;
+  $("sheet-src").textContent = "GET /api/policy?name=" + name;
+  $("sheet-pre").textContent = "loading…";
+  $("sheet-note").hidden = true;
+  $("overlay").classList.add("on");
+  $("sheetclose").focus();
+  api("/api/policy?name=" + encodeURIComponent(name)).then(function (p) {
+    var rule = currentMatchedRule();
+    var hits = renderYaml(p.yaml || "", rule);
+    var note = $("sheet-note");
+    if (rule && hits === 0) {
+      /* The rule that fired is not in this file. That is the inheritance
+         story in the README, so say it rather than showing a dead click. */
+      note.innerHTML = "";
+      note.appendChild(el("span", "plc", "Not in this file"));
+      note.appendChild(document.createTextNode(
+        rule + " is inherited through extends, so it is defined in a parent policy — " +
+        "a team can add rules on top of it but cannot weaken it."));
+      note.hidden = false;
+    } else {
+      note.hidden = true;
+    }
+  }).catch(function (e) {
+    $("sheet-pre").textContent = "";
+    $("sheet-note").hidden = true;
+    var box = el("div", "integ-err", e.message);
+    box.style.borderColor = "var(--structural)";
+    $("sheet-pre").appendChild(box);
+  });
+}
+function currentMatchedRule() {
+  try {
+    var raw = $("raw-g").querySelector("pre").textContent;
+    if (!raw) return null;
+    return JSON.parse(raw).matchedRule || null;
+  } catch (e) { return null; }
+}
+function renderYaml(text, rule) {
+  var pre = $("sheet-pre");
+  pre.innerHTML = "";
+  var lines = String(text).split("\n");
+  var inHit = false, hits = 0;
+  lines.forEach(function (line) {
+    if (rule && /^\s*-\s*name:/.test(line)) {
+      inHit = line.indexOf(rule) !== -1;
+    } else if (/^\s*-\s*name:/.test(line)) {
+      inHit = false;
+    }
+    if (inHit) {
+      hits++;
+      pre.appendChild(el("span", "hit", line + "\n"));
+    } else {
+      pre.appendChild(document.createTextNode(line + "\n"));
+    }
+  });
+  return hits;
+}
+function closePolicy() {
+  $("overlay").classList.remove("on");
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+/* ══ THEME ═════════════════════════════════════════════════════════════ */
+function initTheme() {
+  var btn = $("themebtn");
+  function label() {
+    var t = document.documentElement.getAttribute("data-theme");
+    var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    btn.textContent = dark ? "Light" : "Dark";
+    btn.setAttribute("aria-pressed", String(dark));
+  }
+  btn.addEventListener("click", function () {
+    var t = document.documentElement.getAttribute("data-theme");
+    var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+    label();
+  });
+  label();
+}
+
+/* ══ WIRE ══════════════════════════════════════════════════════════════ */
+document.addEventListener("DOMContentLoaded", function () {
+  $("hostplc").textContent = location.host || "127.0.0.1:8765";
+  initTheme();
+  $("callform").addEventListener("submit", function (ev) { ev.preventDefault(); runBoth(); });
+  $("rungov").addEventListener("click", runGoverned);
+  $("resetbtn").addEventListener("click", doReset);
+  $("drawerbtn").addEventListener("click", function () { openDrawer(); loadAudit(); });
+  $("refreshaudit").addEventListener("click", loadAudit);
+  $("forgebtn").addEventListener("click", forge);
+  $("sheetclose").addEventListener("click", closePolicy);
+  $("overlay").addEventListener("click", function (ev) {
+    if (ev.target === $("overlay")) closePolicy();
+  });
+  document.addEventListener("keydown", function (ev) {
+    if (ev.key === "Escape" && $("overlay").classList.contains("on")) closePolicy();
+  });
+  boot();
+});
+</script>
+</body>
+</html>

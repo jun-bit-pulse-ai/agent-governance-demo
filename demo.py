@@ -20,8 +20,13 @@ from agentmesh.governance import (  # noqa: E402
     govern,
 )
 
+import sqlfacets  # noqa: E402
 import theatre as t  # noqa: E402
 import tools  # noqa: E402
+
+# Replace AGT's SQL facet extractor before any policy is evaluated. See
+# sqlfacets.py for the two defects in the shipped one that this fixes.
+sqlfacets.install()
 
 NOVA = "did:mesh:support-nova"
 ATLAS = "did:mesh:analytics-atlas"
@@ -34,6 +39,10 @@ ANALYTICS_POLICY = "policies/analytics-agent.yaml"
 # a naive denylist would wrongly allow it.
 INNOCENT_SELECT = "SELECT id FROM tickets WHERE subject = 'drop shipment delayed'"
 DISGUISED_DROP = '/* nightly cleanup */ dRoP   TaBLE  "customers"'
+# A stacked statement. AGT's own facet extractor reads only the first one and
+# would report SELECT, letting this through — the case a crude substring
+# denylist actually catches. sqlfacets.py reads every statement.
+STACKED_DROP = "SELECT 1; DROP TABLE customers"
 
 
 def _attempt(call, describe) -> None:
@@ -132,6 +141,7 @@ def act_three(safe_db) -> None:
     for label, query in (
         ("a SELECT that merely contains the word 'drop'", INNOCENT_SELECT),
         ("a DROP disguised with case and comments", DISGUISED_DROP),
+        ("a DROP stacked behind an innocent SELECT", STACKED_DROP),
     ):
         t.call(label, query)
         try:
@@ -141,8 +151,10 @@ def act_three(safe_db) -> None:
             t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
 
     t.note(
-        "A substring denylist gets both of these wrong, in both directions. "
-        "The policy rule reads sql.verb, which comes from the parsed statement."
+        "A substring denylist gets the first two wrong, in both directions. But it "
+        "would catch the third, and AGT's own extractor does not — it reads only the "
+        "first statement. sqlfacets.py replaces it and reports the worst verb across "
+        "all of them. Parsing beats substrings only when you parse the whole input."
     )
 
 
@@ -216,7 +228,8 @@ def act_five() -> None:
 
     t.note(
         "Same tool, same arguments, different agent identity — different verdict. "
-        "Both policies inherit the ACME baseline; neither can weaken it."
+        "Both policies inherit the ACME baseline, and under govern()'s default "
+        "deny_overrides strategy a baseline deny cannot be overridden."
     )
 
 
@@ -267,7 +280,12 @@ def act_six(safe_db) -> None:
     victim.data["rule"] = "allow-read-queries"
 
     ok, err = log.verify_integrity()
-    t.console.print(f"  [bold red]✗ chain verification failed[/] — {err}")
+    if ok:
+        # Never reached with the tamper above, but printing a failure we did not
+        # observe would make this act the one simulated thing in the demo.
+        t.console.print("  [bold yellow]! chain still verifies[/] — the tamper did not take")
+    else:
+        t.console.print(f"  [bold red]✗ chain verification failed[/] — {err}")
     t.console.print()
     t.note(
         "The forged entry's stored hash no longer matches its contents, and every "

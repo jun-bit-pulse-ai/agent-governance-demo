@@ -7,6 +7,8 @@ touching tool code.
 
 from __future__ import annotations
 
+from sqlfacets import extract_sql_facets
+
 # ── Fake production state the agent can damage ────────────────────────────
 
 TABLES: dict[str, int] = {"customers": 1284, "tickets": 9310, "invoices": 4002}
@@ -22,44 +24,24 @@ def reset() -> None:
     EXPORTS.clear()
 
 
-def _verb(query: str) -> str:
-    """Best-effort SQL verb, used only to simulate the tool's side effect."""
-    try:
-        import sqlglot
-        from sqlglot import exp
-
-        stmt = sqlglot.parse(query)[0]
-        for kind, name in (
-            (exp.Drop, "DROP"),
-            (exp.Delete, "DELETE"),
-            (exp.Select, "SELECT"),
-        ):
-            if isinstance(stmt, kind):
-                return name
-        return type(stmt).__name__.upper()
-    except Exception:
-        return "UNKNOWN"
-
-
-# ── Tools ─────────────────────────────────────────────────────────────────
-
-
 def db_query(*, action: str, sql: dict) -> dict:
-    """Run SQL against the production database. No guardrails."""
-    query = sql["query"]
-    verb = _verb(query)
+    """Run SQL against the production database. No guardrails.
 
-    if verb == "DROP":
-        for table in list(TABLES):
-            if table in query.lower():
-                rows = TABLES.pop(table)
-                return {"verb": verb, "dropped": table, "rows_destroyed": rows}
-        return {"verb": verb, "dropped": None, "rows_destroyed": 0}
+    The verb and target come from the same AST parse the policy engine uses
+    (sqlfacets), so the simulated side effect can never disagree with the
+    verdict — and the return shape is uniform, so a caller never has to guess
+    which keys are present.
+    """
+    facets = extract_sql_facets(sql)
+    verb, target = facets["verb"], facets["target"]
+    result = {"verb": verb, "dropped": None, "rows_destroyed": 0, "rows": 0}
 
-    if verb == "SELECT":
-        return {"verb": verb, "rows": 42}
-
-    return {"verb": verb, "rows_affected": 0}
+    if verb == "DROP" and target in TABLES:
+        result["dropped"] = target
+        result["rows_destroyed"] = TABLES.pop(target)
+    elif verb == "SELECT":
+        result["rows"] = 42
+    return result
 
 
 def send_email(*, action: str, to: str, recipients: int, body: str) -> dict:
