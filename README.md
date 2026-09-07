@@ -7,6 +7,8 @@ evaluating the YAML in `policies/` — nothing is simulated or stubbed.
 
 Verified against `agent-governance-toolkit==4.1.0`, Python 3.13.
 
+![Governance blocking a destructive query and a PII export](docs/images/02-governed.png)
+
 ## Run it
 
 ```bash
@@ -34,6 +36,30 @@ call boundary.
 | 4 | `require_approval` routes a bulk send to a human, who approves one and rejects another. |
 | 5 | Same tool, same arguments, different agent identity → different verdict. |
 | 6 | The audit chain is verified, then forged, and the forgery is detected. |
+
+## What it looks like
+
+Every image below is a real run, rendered straight from the demo's own output by
+`capture.py` — not a mockup. Re-running it after a policy change changes the pictures.
+
+**Act 1 — the ungoverned agent.** The tools do exactly what they are told.
+
+![The ungoverned agent drops a table and exports PII](docs/images/01-ungoverned.png)
+
+**Act 3 — structure, not string matching.** One rule, both cases right.
+
+![A SELECT containing the word drop is allowed; a disguised DROP is denied](docs/images/03-sql-ast.png)
+
+**Act 4 — a human in the loop.** `require_approval` routes the decision to a person.
+
+![A routine send allowed, a 200-person notice approved, a 40,000-person campaign rejected](docs/images/04-approval.png)
+
+**Act 6 — the audit chain, verified and then forged.**
+
+![The chain verifies, then fails with Entry 0 hash mismatch after tampering](docs/images/06-audit.png)
+
+Act 5 is in [docs/images/05-identity.png](docs/images/05-identity.png). Each image is
+also written as SVG alongside the PNG.
 
 ## The part worth pausing on (Act 3)
 
@@ -100,3 +126,5 @@ Treat the runtime as the source of truth; this demo does.
 - `policies/` — baseline plus one policy per agent.
 - `demo.py` — the six acts.
 - `theatre.py` — terminal presentation only, no governance logic.
+- `capture.py` — re-renders the README images from a real run.
+- `docs/images/` — generated; do not hand-edit.

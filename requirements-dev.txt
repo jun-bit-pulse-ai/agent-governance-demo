@@ -1,0 +1,7 @@
+# Only needed to regenerate the README images with capture.py.
+# The demo itself does not need these.
+#
+# PNG rendering additionally shells out to `qlmanage`, which is macOS-only.
+# On other platforms capture.py still writes the SVGs and skips the PNGs.
+-r requirements.txt
+Pillow
