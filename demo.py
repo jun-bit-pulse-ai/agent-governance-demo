@@ -32,7 +32,6 @@ NOVA = "did:mesh:support-nova"
 ATLAS = "did:mesh:analytics-atlas"
 
 SUPPORT_POLICY = "policies/support-agent.yaml"
-ANALYTICS_POLICY = "policies/analytics-agent.yaml"
 
 # A SELECT whose *text* contains the word "drop" — a naive denylist would
 # wrongly block this. And a DROP disguised with case and comment tricks —
@@ -45,10 +44,28 @@ DISGUISED_DROP = '/* nightly cleanup */ dRoP   TaBLE  "customers"'
 STACKED_DROP = "SELECT 1; DROP TABLE customers"
 
 
-def _attempt(call, describe) -> None:
+def _rule_of_last_allow(governed) -> str | None:
+    """The rule that permitted the most recent call through `governed`.
+
+    On a denial govern() hands back the PolicyDecision inside GovernanceDenied.
+    On an allow it returns only the tool's result, so the decision has to come
+    from somewhere. Re-evaluating the policy would be a second, separate
+    decision that could differ from the one actually enforced — so read the
+    audit entry that this call just wrote instead. That entry IS the enforced
+    decision.
+    """
+    log = getattr(governed, "audit_log", None)
+    if log is None:
+        return None
+    entries = log.query(limit=1000)
+    return (entries[-1].data.get("rule") or None) if entries else None
+
+
+def _attempt(governed, call, describe) -> None:
     """Run a governed call and report whichever verdict the engine returned."""
     try:
-        t.outcome("allow", describe(call()))
+        result = call()
+        t.outcome("allow", describe(result), _rule_of_last_allow(governed))
     except GovernanceDenied as exc:
         t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
 
@@ -96,11 +113,12 @@ def act_two() -> tuple:
     safe_export = govern(tools.export_dataset, policy=SUPPORT_POLICY, agent_id=NOVA)
 
     t.call("safe_db", DISGUISED_DROP)
-    _attempt(lambda: safe_db(action="db_query", sql={"query": DISGUISED_DROP}),
+    _attempt(safe_db, lambda: safe_db(action="db_query", sql={"query": DISGUISED_DROP}),
              lambda _: "executed")
 
     t.call("safe_export", "12,000 customer records → s3://partner-bucket")
     _attempt(
+        safe_export,
         lambda: safe_export(
             action="export_dataset",
             data={"contains_pii": True},
@@ -112,9 +130,10 @@ def act_two() -> tuple:
 
     t.call("safe_export", "the same query, anonymised — legitimate work still flows")
     _attempt(
+        safe_export,
         lambda: safe_export(
             action="export_dataset",
-            data={"contains_pii": False},
+            data={"contains_pii": False, "anonymised": True},
             rows=12_000,
             destination="s3://partner-bucket",
         ),
@@ -146,7 +165,8 @@ def act_three(safe_db) -> None:
         t.call(label, query)
         try:
             res = safe_db(action="db_query", sql={"query": query})
-            t.outcome("allow", f"executed — returned {res['rows']} rows")
+            t.outcome("allow", f"executed — returned {res['rows']} rows",
+                      _rule_of_last_allow(safe_db))
         except GovernanceDenied as exc:
             t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
 
@@ -197,7 +217,9 @@ def act_four() -> None:
         t.call("safe_email", f"{label} → {to}")
         try:
             safe_email(action="send_email", to=to, recipients=recipients, body="…")
-            t.outcome("allow", f"sent to {recipients:,} recipient" + ("s" if recipients != 1 else ""))
+            t.outcome("allow",
+                      f"sent to {recipients:,} recipient" + ("s" if recipients != 1 else ""),
+                      _rule_of_last_allow(safe_email))
         except GovernanceDenied as exc:
             t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
 
@@ -209,27 +231,27 @@ def act_four() -> None:
 def act_five() -> None:
     t.act(5, "Which agent did this?", "Identity decides which policy applies.")
 
-    atlas_db = govern(tools.db_query, policy=ANALYTICS_POLICY, agent_id=ATLAS)
-    atlas_email = govern(tools.send_email, policy=ANALYTICS_POLICY, agent_id=ATLAS)
+    # One policy file, two identities. Varying only the agent_id isolates the
+    # effect being claimed; varying the policy file too would prove nothing
+    # about identity.
+    nova_db = govern(tools.db_query, policy=SUPPORT_POLICY, agent_id=NOVA)
+    atlas_db = govern(tools.db_query, policy=SUPPORT_POLICY, agent_id=ATLAS)
 
-    t.call("Atlas · db_query", "SELECT — within its grant")
-    try:
-        atlas_db(action="db_query", sql={"query": INNOCENT_SELECT})
-        t.outcome("allow", "executed")
-    except GovernanceDenied as exc:
-        t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
+    t.call("Nova · db_query", "the support policy names Nova, so it applies")
+    _attempt(nova_db, lambda: nova_db(action="db_query", sql={"query": INNOCENT_SELECT}),
+             lambda _: "executed")
 
-    t.call("Atlas · send_email", "one customer reply — Nova may do this, Atlas may not")
-    try:
-        atlas_email(action="send_email", to="ana@example.com", recipients=1, body="…")
-        t.outcome("allow", "sent")
-    except GovernanceDenied as exc:
-        t.outcome("deny", str(exc.decision.reason), exc.decision.matched_rule)
+    t.call("Atlas · db_query", "same policy file, same query, different agent_id")
+    _attempt(atlas_db, lambda: atlas_db(action="db_query", sql={"query": INNOCENT_SELECT}),
+             lambda _: "executed")
 
     t.note(
-        "Same tool, same arguments, different agent identity — different verdict. "
-        "Both policies inherit the ACME baseline, and under govern()'s default "
-        "deny_overrides strategy a baseline deny cannot be overridden."
+        "One variable changed: the agent_id. The policy names Nova in its `agents:` "
+        "list, so for Atlas no policy applies at all and the engine falls back to "
+        "deny. Identity selects which policy set applies, all or nothing — it never "
+        "reaches rule evaluation. And nothing authenticates it: agent_id is a string "
+        "the caller supplies, so this separates concerns rather than enforcing a "
+        "boundary."
     )
 
 
@@ -288,9 +310,12 @@ def act_six(safe_db) -> None:
         t.console.print(f"  [bold red]✗ chain verification failed[/] — {err}")
     t.console.print()
     t.note(
-        "The forged entry's stored hash no longer matches its contents, and every "
-        "later entry chains off it. Tampering is detectable, not preventable — "
-        "which is exactly what an auditor needs."
+        "What fires is entry 0's own hash no longer matching its contents. Re-hash "
+        "entry 0 to repair that and you get 'Entry 1 chain broken' instead — the "
+        "chain is the second line of defence, not the first. The honest limit: "
+        "compute_hash is unkeyed SHA-256 over an in-memory log with no published "
+        "root, so anyone who can rewrite the whole chain verifies clean. This is "
+        "evidence against corruption and against a reader, not against a writer."
     )
 
 

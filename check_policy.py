@@ -40,14 +40,14 @@ def sql(query: str) -> dict:
     return {"action": {"type": "db_query"}, "sql": {"query": query}}
 
 
-def email(recipients: int) -> dict:
+def email(recipients) -> dict:
     return {"action": {"type": "send_email"}, "recipients": {"value": recipients}}
 
 
-def export(pii: bool, rows: int) -> dict:
+def export(rows: int, **flags) -> dict:
     return {
         "action": {"type": "export_dataset"},
-        "data": {"contains_pii": pii},
+        "data": dict(flags),
         "rows": {"value": rows},
     }
 
@@ -69,14 +69,21 @@ CASES = [
     ("CREATE",             SUPPORT, NOVA, sql("CREATE TABLE t (a INT)"),         "deny", "db-query-is-select-only"),
     ("unparseable SQL",    SUPPORT, NOVA, sql("!!! not sql at all"),             "deny", "db-query-is-select-only"),
     # baseline: block-pii-export — the rule the silent-typo bug disables
-    ("PII export",         SUPPORT, NOVA, export(True, 900),                     "deny", "block-pii-export"),
-    ("PII export, large",  SUPPORT, NOVA, export(True, 12_000),                  "deny", "block-pii-export"),
+    ("PII export",         SUPPORT, NOVA, export(900, contains_pii=True),        "deny", "block-pii-export"),
+    ("PII export, large",  SUPPORT, NOVA, export(12_000, contains_pii=True),     "deny", "block-pii-export"),
     # support: the allow paths
     ("innocent SELECT",    SUPPORT, NOVA, sql("SELECT id FROM tickets WHERE subject = 'drop shipment delayed'"), "allow", "allow-read-queries"),
     ("routine email",      SUPPORT, NOVA, email(3),                              "allow", "allow-routine-email"),
     ("bulk email",         SUPPORT, NOVA, email(2_500),                          "require_approval", "approve-bulk-email"),
-    ("clean export",       SUPPORT, NOVA, export(False, 12_000),                 "allow", "allow-anonymised-export"),
-    ("oversized export",   SUPPORT, NOVA, export(False, 90_000),                 "deny", None),
+    ("clean export",       SUPPORT, NOVA, export(12_000, anonymised=True),       "allow", "allow-anonymised-export"),
+    ("oversized export",   SUPPORT, NOVA, export(90_000, anonymised=True),       "deny", None),
+    # Regression cases for the fail-open holes. An allow rule must assert what
+    # it needs; absence must fall through to the deny default, never into allow.
+    ("export, no flags",   SUPPORT, NOVA, export(12_000),                        "deny", None),
+    ("export, misspelt",   SUPPORT, NOVA, export(12_000, anonymized=True),       "deny", None),
+    ("email, no count",    SUPPORT, NOVA, {"action": {"type": "send_email"}},    "deny", None),
+    ("email, null count",  SUPPORT, NOVA, email(None),                           "deny", None),
+    ("email, negative",    SUPPORT, NOVA, email(-1),                             "deny", None),
     # analytics: a strictly smaller grant
     ("Atlas may read",     ANALYTICS, ATLAS, sql("SELECT 1 FROM tickets"),       "allow", "allow-read-queries"),
     ("Atlas may not mail", ANALYTICS, ATLAS, email(1),                           "deny", None),
@@ -86,7 +93,7 @@ CASES = [
     # not a control.
     ("Atlas DELETE",       ANALYTICS, ATLAS, sql("DELETE FROM invoices"),        "deny", "block-row-deletion"),
     ("Atlas INSERT",       ANALYTICS, ATLAS, sql("INSERT INTO tickets VALUES (1)"), "deny", "db-query-is-select-only"),
-    ("Atlas PII export",   ANALYTICS, ATLAS, export(True, 900),                  "deny", "block-pii-export"),
+    ("Atlas PII export",   ANALYTICS, ATLAS, export(900, contains_pii=True),     "deny", "block-pii-export"),
     # identity scoping: a policy scoped to one agent must not apply to another
     ("wrong agent id",     SUPPORT, ATLAS, sql("SELECT 1 FROM tickets"),         "deny", None),
 ]

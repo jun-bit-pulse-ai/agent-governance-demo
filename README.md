@@ -40,7 +40,7 @@ call boundary.
 | 2 | `govern()` wraps the same tools. Both attacks are blocked; the legitimate anonymised export still flows. |
 | 3 | Policy reads a **parsed SQL AST**, not the query string — including the case where parsing alone is not enough. |
 | 4 | `require_approval` routes a bulk send to a human, who approves one and rejects another. |
-| 5 | Same tool, same arguments, different agent identity → different verdict (identity is self-asserted; see finding 6). |
+| 5 | One policy file, one query, two `agent_id`s → different verdict. Identity is self-asserted; see finding 6. |
 | 6 | The audit chain is verified, then forged, and the forgery is detected. |
 
 ## What it looks like
@@ -66,6 +66,12 @@ Every image below is a real run, rendered straight from the demo's own output by
 
 Act 5 is in [docs/images/05-identity.png](docs/images/05-identity.png). Each image is
 also written as SVG alongside the PNG.
+
+Regenerating them needs `pip install -r requirements-dev.txt`. The PNG step shells
+out to macOS `qlmanage`, so elsewhere `capture.py` writes the SVGs and skips the
+PNGs. One caveat on "re-running changes the pictures": Act 6 prints audit-entry
+hashes, which include a timestamp, so `06-audit.*` differs on every capture run
+whether or not anything changed.
 
 ## The part worth pausing on (Act 3)
 
@@ -114,13 +120,31 @@ baseline.yaml ── block destructive SQL, block writes, block PII export
     └── analytics-agent.yaml (Atlas) + read only
 ```
 
+Nova's line above is her full grant: read, routine mail, approval-gated bulk
+mail, and bounded anonymised export. `analytics-agent.yaml` is a second scoped
+example, exercised by `check_policy.py` rather than by the demo.
+
+```text
+```
+
 Both policies set `default_action: deny`, so anything not explicitly granted is
-refused. Act 5's denial (`No matching rules, using default`) is that fail-closed
+refused. That is not enough on its own. A condition naming a field the caller
+never supplies evaluates `False`, so a *permissive* rule with only upper bounds —
+`recipients.value < 50` — is satisfied by a missing, null or negative value and
+grants the call before the deny default is ever consulted. Every allow rule here
+therefore asserts what it needs (`recipients.value >= 1 and ... < 50`), and the
+export rule requires a positive `data.anonymised` rather than the mere absence of
+`data.contains_pii`. `check_policy.py` has a regression case for each.
+
+Worth noticing which facets can be trusted. `sql.verb` is *derived* from the
+payload by parsing it, so a caller cannot lie about it. `contains_pii`, `rows` and
+`recipients` are *asserted* by the caller and reflected verbatim into the context
+(`govern.py:364-386`). A policy is only as honest as the facts it reads. Act 5's denial (`No matching rules, using default`) is that fail-closed
 default doing its job.
 
 ## Findings from building this
 
-Seven defects in AGT 4.1.0, each reproduced against the installed package. Nothing
+Eight defects in AGT 4.1.0, each reproduced against the installed package. Nothing
 here is inferred from documentation.
 
 ### 1. `agt lint-policy` rejects policies the runtime executes
@@ -146,7 +170,32 @@ This matters because the linter is a documented gate, though not in the README:
 `(^|/)(manifest|.*polic.*)\.(yaml|yml|json)$` — which matches every file in this
 repo's `policies/`, and upstream's own Quick Start `policy.yaml`.
 
-The linter also requires a `version:` field the runtime happily defaults.
+Both halves land on AGT's own Quick Start policy. Copied verbatim from upstream
+`README.md` lines 97-110 and linted:
+
+```
+$ agt lint-policy policy.yaml
+policy.yaml:1: error: Missing required field 'version'
+policy.yaml:12: error: Rule 'require-approval-for-send': unknown action 'require_approval'
+2 error(s) found.                                            # exit 1
+```
+
+The runtime loads that same file without complaint (`version` defaults to `"1.0"`,
+`policy.py:214`).
+
+The linter is also blind in the other direction. All of its condition checking is
+gated on `isinstance(condition, dict)` (`lint_policy.py:403`), and every condition
+in this repo — and in upstream's Quick Start — is a **string**. So no facet name,
+operator or literal is ever inspected:
+
+```
+$ agt lint-policy nonsense.yaml     # condition: "sql.vrb in ['DROP'] AND totally.made.up.field == 'zzz'"
+No issues found.                                             # exit 0
+```
+
+It rejects a valid policy and accepts a meaningless one. That asymmetry is why
+this repo tests policies by evaluating them ([`check_policy.py`](check_policy.py))
+rather than by linting them.
 
 ### 2. The SQL facet extractor crashes on any current sqlglot
 
@@ -212,6 +261,28 @@ Declared at `govern.py:100` and `:113`, read nowhere in the package. Setting it
 silently has no effect, and `govern()` has no shared-sink parameter either — so
 every governed callable keeps a private in-memory `AuditLog`. That is why Act 6
 shows one tool's ledger rather than a fleet-wide one.
+
+### 8. `warn` and `log` deny, and the code says they shouldn't
+
+`PolicyDecision.allowed` is computed as `allowed=(rule.action == "allow")`
+(`policy.py:620`). Everything that is not literally `allow` blocks —
+`require_approval` is special-cased in `govern.py`, but `warn` and `log` are not.
+A rule written to flag without blocking silently blocks:
+
+```
+action: warn   -> DENIED
+action: log    -> DENIED
+action: allow  -> tool ran
+```
+
+Twelve lines above, the code builds this rule's own reason string:
+
+```python
+f"Warning from policy '{policy.name}': ... Action allowed but logged for review."
+```
+
+The message says allowed; the verdict is denied. This is more severe than finding 1,
+because it fails in production rather than in CI, and the intent is unambiguous.
 
 Findings 2-4 are why this repo ships its own extractor rather than pinning an
 ancient sqlglot. Treat the runtime as the source of truth; this demo does.

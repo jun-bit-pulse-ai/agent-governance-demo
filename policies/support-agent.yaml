@@ -15,8 +15,12 @@ rules:
     action: allow
     description: "Read-only queries are Nova's normal work"
 
+  # Note the lower bound. `recipients.value < 50` alone is satisfied by a
+  # missing, null or negative value, because the engine coerces None to 0
+  # (policy.py:164) — so an omitted field would sail past the approval gate.
+  # An allow rule must assert what it needs, never merely fail to object.
   - name: allow-routine-email
-    condition: "action.type == 'send_email' and recipients.value < 50"
+    condition: "action.type == 'send_email' and recipients.value >= 1 and recipients.value < 50"
     action: allow
     description: "Replying to a customer needs no ceremony"
 
@@ -27,7 +31,11 @@ rules:
     priority: 50
     description: "Anything campaign-shaped gets a human in the loop"
 
+  # Requires a positive `anonymised` assertion rather than the mere absence of
+  # `contains_pii`: an empty data dict, or a misspelt key, would otherwise
+  # allow a 12,000-row personal-data export. Absence must fall through to the
+  # deny default, not into an allow.
   - name: allow-anonymised-export
-    condition: "action.type == 'export_dataset' and rows.value <= 50000"
+    condition: "action.type == 'export_dataset' and data.anonymised and rows.value >= 1 and rows.value <= 50000"
     action: allow
-    description: "Bounded, non-personal exports are fine — up to 50k rows"
+    description: "Bounded exports are fine once positively marked anonymised"

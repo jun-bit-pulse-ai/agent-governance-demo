@@ -100,7 +100,14 @@ from agentmesh.governance import (  # noqa: E402
     govern,
 )
 
+import sqlfacets  # noqa: E402
 import tools  # noqa: E402
+
+# The console must evaluate policy exactly as demo.py and check_policy.py do.
+# Without this the shipped AGT extractor is in force, which reads only the
+# first statement and crashes on ALTER/TRUNCATE/GRANT — so the governed lane
+# would allow destructive SQL the terminal demo denies. See sqlfacets.py.
+sqlfacets.install()
 
 HOST = "127.0.0.1"
 PORT = 8765
