@@ -27,6 +27,33 @@ here, because all three policies are `default_action: deny` — but it fails **o
 under an allow-default policy, which is the posture AGT's own Quick Start uses.
 AGT logs a warning, not an error, so nothing stops you shipping it.
 
+## The browser console
+
+The same engine, driven from a page instead of a script:
+
+```bash
+.venv/bin/python ui/server.py      # then open http://127.0.0.1:8765/
+```
+
+It runs **the same call down two lanes at once** — one ungoverned, one through
+`govern()` — and shows the estate afterwards on both sides. A denial's only
+evidence is an absence, so the governed column stamps `±0` on every counter.
+Each value on the page names the engine field it came from
+(`decision.matched_rule`, `decision.evaluation_ms`, `audit.entryHash`) so a
+sceptic can check it against the raw JSON at the foot of the same column.
+
+Two honest limits, stated on the page as well as here:
+
+- **The approver is a stand-in.** The `require_approval` *verdict* is the
+  engine's, but there is no approval endpoint — who signs off is decided
+  server-side. The page labels it rather than implying a person was asked.
+- **The audit drawer shows one chain.** Per finding 7, `govern()` gives each
+  callable its own `AuditLog` and takes no shared-sink argument.
+
+Everything else on the page is a real verdict from a real evaluation. The
+console calls `sqlfacets.install()` for the same reason `demo.py` does; without
+it the governed lane would allow destructive SQL the terminal demo denies.
+
 ## The scenario
 
 Two agents at a fictional company share a set of genuinely dangerous tools
@@ -295,6 +322,8 @@ ancient sqlglot. Treat the runtime as the source of truth; this demo does.
 - `theatre.py` — terminal presentation only, no governance logic.
 - `sqlfacets.py` — a replacement SQL facet extractor; see findings 2-4.
 - `check_policy.py` — condition-coverage test for the policies; see finding 5.
+- `ui/server.py` — stdlib-only HTTP server; the console's real verdicts.
+- `ui/static/index.html` — the console page; one file, no framework, no build.
 - `docs/ARCHITECTURE.md` — design for governing a multi-agent build.
 - `docs/PARALLEL_AGENT_PLAN.md` — how several agents would build this repo.
 - `capture.py` — re-renders the README images from a real run.

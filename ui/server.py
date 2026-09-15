@@ -147,6 +147,7 @@ TOOL_SPECS: list[dict[str, Any]] = [
             {"name": "destination", "type": "string"},
             {"name": "rows", "type": "int"},
             {"name": "contains_pii", "type": "bool"},
+            {"name": "anonymised", "type": "bool"},
         ],
     },
 ]
@@ -224,12 +225,17 @@ def build_kwargs(tool: str, args: dict) -> dict:
         }
 
     if tool == "export_dataset":
+        # `anonymised` is deliberately NOT derived from `contains_pii`. The
+        # policy requires a positive anonymisation claim precisely because
+        # absence must not read as "safe" — deriving it here would put that
+        # fail-open hole straight back. Omitted therefore means False.
         return {
             "action": "export_dataset",
             "data": {
                 "contains_pii": _as_bool(
                     _need(args, "contains_pii"), "contains_pii"
-                )
+                ),
+                "anonymised": _as_bool(args.get("anonymised", False), "anonymised"),
             },
             "rows": _as_int(_need(args, "rows"), "rows"),
             "destination": _as_str(_need(args, "destination"), "destination"),

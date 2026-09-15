@@ -11,13 +11,13 @@
 :root{
   --ground:#E7EAEC;      /* concrete, deliberately not cream */
   --panel:#FFFFFF;
-  --structural:#C0C7CD;  /* the 2px rules and channel walls */
+  --structural:#C0C7CD; --control-edge:#7E8992;  /* the 2px rules and channel walls */
   --ink:#0E1419;
   --muted:#5D686F;
   --deny:#C11029;  --deny-ink:#FFFFFF;
   --approval:#FFB020; --approval-ink:#8A5B00;
   --allow:#0B7D48;
-  --dead:#9AA4AC;
+  --dead:#6A757E;              /* 4.71:1 on panel */
   --steel:#AAB3BA;       /* the gate at rest */
   --steel-2:#96A0A8;
   --hatch:rgba(14,20,25,.09);
@@ -29,21 +29,21 @@
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
-    --ground:#0F1317; --panel:#171C21; --structural:#29323A;
+    --ground:#0F1317; --panel:#171C21; --structural:#29323A; --control-edge:#75818B;
     --ink:#EEF2F5; --muted:#8C97A1;
     --deny:#F0384B; --deny-ink:#FFFFFF;
     --approval:#FFB020; --approval-ink:#2A1D00;
-    --allow:#2FCF7F; --dead:#5A646D;
+    --allow:#2FCF7F; --dead:#8E9AA5;
     --steel:#3C4650; --steel-2:#333C45;
     --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
   }
 }
 :root[data-theme="dark"]{
-  --ground:#0F1317; --panel:#171C21; --structural:#29323A;
+  --ground:#0F1317; --panel:#171C21; --structural:#29323A; --control-edge:#75818B;
   --ink:#EEF2F5; --muted:#8C97A1;
   --deny:#F0384B; --deny-ink:#FFFFFF;
   --approval:#FFB020; --approval-ink:#2A1D00;
-  --allow:#2FCF7F; --dead:#5A646D;
+  --allow:#2FCF7F; --dead:#8E9AA5;
   --steel:#3C4650; --steel-2:#333C45;
   --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
 }
@@ -82,7 +82,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .rail .sub{color:var(--muted);font-size:14px}
 .rail .right{margin-left:auto;display:flex;gap:10px;align-items:center}
 .ghost{
-  background:none;border:1px solid var(--structural);color:var(--muted);
+  background:none;border:1px solid var(--control-edge);color:var(--muted);
   padding:5px 10px;font:12px/1.25 var(--mono);text-transform:uppercase;letter-spacing:.16em;
   cursor:pointer;
 }
@@ -102,7 +102,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
 .chips .plc{border-color:var(--structural);color:var(--muted);align-self:center}
 .chip{
-  background:none;border:1px solid var(--structural);color:var(--ink);
+  background:none;border:1px solid var(--control-edge);color:var(--ink);
   padding:7px 11px;font:15px/1.2 var(--mono);cursor:pointer;text-align:left;
 }
 .chip:hover{border-color:var(--ink);background:var(--shade)}
@@ -114,11 +114,11 @@ legend{padding:0;margin:0 0 8px}
 .pick{display:flex;flex-direction:column;gap:6px}
 .pick label{
   display:flex;gap:10px;align-items:baseline;cursor:pointer;
-  border:1px solid var(--structural);padding:8px 10px;background:var(--panel);
+  border:1px solid var(--control-edge);padding:8px 10px;background:var(--panel);
 }
 .pick label:hover{border-color:var(--ink)}
 .pick input{position:absolute;opacity:0;width:0;height:0}
-.pick .mark{width:12px;height:12px;border:2px solid var(--structural);flex:none;align-self:center}
+.pick .mark{width:12px;height:12px;border:2px solid var(--control-edge);flex:none;align-self:center}
 .pick input:checked + .mark{background:var(--ink);border-color:var(--ink)}
 .pick input:focus-visible + .mark{outline:3px solid var(--ink);outline-offset:2px}
 .pick .nm{font-size:15px}
@@ -130,13 +130,13 @@ legend{padding:0;margin:0 0 8px}
 .arg .lab{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
 .arg .lab .n{font:800 13px/1.2 var(--sans);text-transform:uppercase;letter-spacing:.06em}
 .arg input[type=text],.arg textarea,.arg input[type=number]{
-  width:100%;background:var(--ground);border:1px solid var(--structural);
+  width:100%;background:var(--ground);border:1px solid var(--control-edge);
   color:var(--ink);padding:9px 10px;font:16px/1.4 var(--mono);
 }
 .arg textarea{resize:vertical;min-height:66px}
 .stepper{display:flex;align-items:stretch;gap:0;max-width:340px}
 .stepper button{
-  width:46px;background:var(--ground);border:1px solid var(--structural);
+  width:46px;background:var(--ground);border:1px solid var(--control-edge);
   cursor:pointer;font:800 20px/1 var(--sans);color:var(--ink);
 }
 .stepper button:hover{background:var(--shade);border-color:var(--ink)}
@@ -144,7 +144,7 @@ legend{padding:0;margin:0 0 8px}
 .toggle{display:inline-flex;align-items:center;gap:12px;cursor:pointer}
 .toggle input{position:absolute;opacity:0;width:0;height:0}
 .lever{
-  width:64px;height:32px;border:2px solid var(--structural);background:var(--ground);
+  width:64px;height:32px;border:2px solid var(--control-edge);background:var(--ground);
   position:relative;flex:none;
 }
 .lever::after{
@@ -166,7 +166,7 @@ legend{padding:0;margin:0 0 8px}
 .run[disabled]{opacity:.45;cursor:progress}
 .run2{
   width:100%;padding:11px 12px;cursor:pointer;background:none;
-  border:1px solid var(--structural);color:var(--ink);
+  border:1px solid var(--control-edge);color:var(--ink);
   font:15px/1.2 var(--mono);
 }
 .run2:hover{border-color:var(--ink);background:var(--shade)}
@@ -548,6 +548,17 @@ function fmt(n) {
   if (typeof n !== "number" || !isFinite(n)) return String(n);
   return n.toLocaleString("en-US");
 }
+function revealVerdict() {
+  /* The page is taller than a projector viewport, so without this the verdict
+     lands below the fold and the button looks broken. */
+  var target = document.getElementById("lane-g");
+  if (!target || !target.scrollIntoView) return;
+  try {
+    target.scrollIntoView({ block: "start", behavior: reduced() ? "auto" : "smooth" });
+  } catch (e) {
+    target.scrollIntoView(true);
+  }
+}
 function reduced() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 }
@@ -600,9 +611,9 @@ var SCENARIOS = [
   { label: "SELECT containing 'drop'", tool: "db_query",
     args: { sql: "SELECT id FROM tickets WHERE subject = 'drop shipment delayed'" } },
   { label: "12,000 PII rows → s3://partner-bucket", tool: "export_dataset",
-    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: true } },
+    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: true, anonymised: false } },
   { label: "same export, anonymised", tool: "export_dataset",
-    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: false } },
+    args: { destination: "s3://partner-bucket", rows: 12000, contains_pii: false, anonymised: true } },
   { label: "one customer reply", tool: "send_email",
     args: { to: "ana@example.com", recipients: 1, body: "…" } },
   { label: "200-person maintenance notice", tool: "send_email",
@@ -879,6 +890,7 @@ function runBoth() {
     paintLane("u", uErr ? { err: uErr.message } : { r: u }, baseline);
     paintLane("g", gErr ? { err: gErr.message } : { r: g }, baseline);
     play(gen, uErr ? null : u, gErr ? null : g);
+    revealVerdict();
     loadAudit();
   });
 }
@@ -991,7 +1003,7 @@ function play(gen, u, g, govOnly) {
       gate.dataset.state = "unlit";
     } else if (g.approval && g.approval.requested) {
       gate.dataset.state = "held";
-      var chip = el("div", "approver", "approver · " + (g.approval.approver || "—"));
+      var chip = el("div", "approver", "approver (stand-in) · " + (g.approval.approver || "—"));
       gate.appendChild(chip);
       later(760, function () {
         var ok = (g.allowed === true);
@@ -1073,6 +1085,11 @@ function paintLane(side, payload, baseline) {
       rows.push(["Approver", (r.approval.approver || "—") + " · approved=" + String(r.approval.approved),
                  "decision.approval"]);
       if (r.approval.reason) rows.push(["Approver said", String(r.approval.reason), "decision.approval.reason"]);
+      /* The require_approval VERDICT above is the engine's. Who signs off is
+         not: there is no approval endpoint, so a stand-in decides server-side.
+         Saying so here keeps the page honest about which half is real. */
+      rows.push(["Note", "the verdict is the engine's; the approver is a stand-in, not a real person",
+                 "demo stand-in", null, true]);
     }
     rows.push(["Elapsed", (typeof r.evaluationMs === "number" ? r.evaluationMs + " ms" : "—"), "decision.evaluation_ms"]);
     if (r.audit) {
