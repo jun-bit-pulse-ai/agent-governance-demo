@@ -15,7 +15,7 @@
   --ink:#0E1419;
   --muted:#5D686F;
   --deny:#C11029;  --deny-ink:#FFFFFF;
-  --approval:#FFB020; --approval-ink:#8A5B00;
+  --approval:#FFB020; --approval-ink:#8A5B00; --approval-text:#8A5B00;  /* 5.87:1 */
   --allow:#0B7D48;
   --dead:#6A757E;              /* 4.71:1 on panel */
   --steel:#AAB3BA;       /* the gate at rest */
@@ -32,7 +32,7 @@
     --ground:#0F1317; --panel:#171C21; --structural:#29323A; --control-edge:#75818B;
     --ink:#EEF2F5; --muted:#8C97A1;
     --deny:#F0384B; --deny-ink:#FFFFFF;
-    --approval:#FFB020; --approval-ink:#2A1D00;
+    --approval:#FFB020; --approval-ink:#2A1D00; --approval-text:#FFB020;
     --allow:#2FCF7F; --dead:#8E9AA5;
     --steel:#3C4650; --steel-2:#333C45;
     --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
@@ -42,7 +42,7 @@
   --ground:#0F1317; --panel:#171C21; --structural:#29323A; --control-edge:#75818B;
   --ink:#EEF2F5; --muted:#8C97A1;
   --deny:#F0384B; --deny-ink:#FFFFFF;
-  --approval:#FFB020; --approval-ink:#2A1D00;
+  --approval:#FFB020; --approval-ink:#2A1D00; --approval-text:#FFB020;
   --allow:#2FCF7F; --dead:#8E9AA5;
   --steel:#3C4650; --steel-2:#333C45;
   --hatch:rgba(238,242,245,.10); --shade:rgba(238,242,245,.04);
@@ -341,8 +341,15 @@ table.chain th{
   color:var(--muted);padding:8px 12px 8px 0;border-bottom:1px solid var(--structural);font-weight:400;
 }
 table.chain td{padding:9px 12px 9px 0;border-bottom:1px solid var(--structural);font:14px/1.4 var(--mono);vertical-align:top}
-table.chain td.o-allow{color:var(--allow)}
-table.chain td.o-deny{color:var(--deny)}
+table.chain td.o-allow,
+table.chain td.o-approved{color:var(--allow)}
+table.chain td.o-deny,
+table.chain td.o-rejected{color:var(--deny)}
+/* AGT writes an approval_decision entry alongside the policy_evaluation one,
+   so the live chain also contains approved / rejected / require_approval. */
+table.chain td.o-require_approval,
+table.chain td.o-warn{color:var(--approval-text)}
+table.chain td.o-log{color:var(--muted)}
 .link{display:flex;align-items:center;gap:8px;white-space:nowrap}
 .link .r{width:22px;height:2px;background:var(--structural);flex:none}
 .link .r.broken{background:repeating-linear-gradient(90deg,var(--deny) 0 4px,transparent 4px 8px)}
@@ -394,7 +401,7 @@ table.chain td.o-deny{color:var(--deny)}
   <span class="sub">Agent Governance Toolkit 4.1.0 &middot; every verdict on this page is returned by AGT&rsquo;s policy engine</span>
   <span class="right">
     <span class="plc" id="hostplc">127.0.0.1:8765</span>
-    <button type="button" class="ghost" id="themebtn" aria-pressed="false">Dark</button>
+    <button type="button" class="ghost" id="themebtn">Dark</button>
   </span>
 </header>
 
@@ -488,9 +495,9 @@ table.chain td.o-deny{color:var(--deny)}
 <div class="drawer" id="drawer">
   <div class="bar">
     <button type="button" class="ghost" id="drawerbtn" aria-expanded="false" aria-controls="drawerbody">Audit chain</button>
-    <span class="t"><span class="num" id="chain-n">0</span> entries</span>
+    <span class="t"><span class="num" id="chain-n">0</span> <span id="chain-word">entries</span></span>
     <span class="integ" id="chain-integ">integrity &mdash;</span>
-    <span class="path">audit.entryHash &rarr; audit.previousHash</span>
+    <span class="path">entry N.previousHash = entry N&minus;1.entryHash</span>
     <span class="grow"></span>
     <button type="button" class="ghost" id="forgebtn">Forge a denial</button>
     <button type="button" class="ghost" id="refreshaudit">Reload</button>
@@ -508,7 +515,9 @@ table.chain td.o-deny{color:var(--deny)}
       <button type="button" class="ghost" id="sheetclose">Close</button>
     </div>
     <div id="sheet-note" hidden></div>
-    <pre id="sheet-pre"></pre>
+    <!-- tabindex makes the scrollable policy text reachable by keyboard;
+         a scroll container that only a mouse can move fails WCAG 2.1.1. -->
+    <pre id="sheet-pre" tabindex="0" role="region" aria-label="Policy YAML"></pre>
   </div>
 </div>
 
@@ -859,6 +868,7 @@ function callBody(governed) {
 function runBoth() {
   if (S.busy || !S.tool || !S.agent) return;
   var gen = ++S.gen;
+  S.runArgs = { tool: S.tool, args: currentArgs() };
   setBusy(true);
   armChannels();
   var baseline = null, u = null, g = null, uErr = null, gErr = null, fatal = null;
@@ -1129,7 +1139,12 @@ function paintLane(side, payload, baseline) {
   setEstateFrom(side, r, baseline, !reduced());
 
   if (side === "g") {
-    if (kind === "deny") { S.denies++; $("tally-deny").textContent = fmt(S.denies); }
+    /* Count what was actually stopped, not what was labelled "deny". A
+       rejected approval sets kind="hold" yet never reached the tool, so
+       keying off kind undercounted every refused campaign. */
+    if (r.verdict && r.allowed !== true) {
+      S.denies++; $("tally-deny").textContent = fmt(S.denies);
+    }
     if (r.approval && r.approval.requested) { S.holds++; $("tally-hold").textContent = fmt(S.holds); }
   }
 }
@@ -1254,7 +1269,9 @@ function setEstateFrom(side, r, baseline, animate) {
   box.appendChild(estateRow("outbox", r.outbox, (typeof r.outbox === "number" && typeof ob === "number") ? r.outbox - ob : null));
   box.appendChild(estateRow("exports", r.exports, (typeof r.exports === "number" && typeof ex === "number") ? r.exports - ex : null));
 
-  var args = currentArgs();
+  /* Args as they were when this call was made — not currentArgs(), which
+     would relabel an old reading if the form has been edited since. */
+  var args = (S.runArgs && S.runArgs.tool === S.tool) ? S.runArgs.args : currentArgs();
   if (r.result && args.contains_pii === true) {
     stamp.appendChild(el("span", "plc", "Contained PII"));
   } else if (!r.result) {
@@ -1309,6 +1326,7 @@ function loadAudit() {
     p.style.borderColor = "var(--structural)";
     body.appendChild(p);
     $("chain-n").textContent = "—";
+    $("chain-word").textContent = "entries";
     var ig = $("chain-integ");
     ig.className = "integ"; ig.textContent = "integrity unknown";
   });
@@ -1318,6 +1336,7 @@ function renderAudit(a) {
   var entries = a.entries || [];
   var integ = a.integrity || {};
   $("chain-n").textContent = fmt(entries.length);
+  $("chain-word").textContent = entries.length === 1 ? "entry" : "entries";
   var ig = $("chain-integ");
   if (integ.ok === false) { ig.className = "integ bad"; ig.textContent = "integrity FAILED"; }
   else if (integ.ok === true) { ig.className = "integ"; ig.textContent = "integrity ok"; }
@@ -1410,6 +1429,8 @@ function openPolicy() {
   $("sheet-pre").textContent = "loading…";
   $("sheet-note").hidden = true;
   $("overlay").classList.add("on");
+  document.body.style.overflow = "hidden";
+  document.addEventListener("keydown", sheetKeys, true);
   $("sheetclose").focus();
   api("/api/policy?name=" + encodeURIComponent(name)).then(function (p) {
     var rule = currentMatchedRule();
@@ -1464,7 +1485,32 @@ function renderYaml(text, rule) {
 }
 function closePolicy() {
   $("overlay").classList.remove("on");
+  document.body.style.overflow = "";
+  document.removeEventListener("keydown", sheetKeys, true);
   if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+
+/* aria-modal="true" is a promise to assistive tech that the rest of the page
+   is unreachable. Nothing was keeping that promise: Tab walked straight out
+   behind the sheet and the page scrolled under it. */
+function sheetFocusables() {
+  var sheet = document.querySelector("#overlay .sheet");
+  if (!sheet) return [];
+  return [].slice.call(sheet.querySelectorAll(
+    'button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])'
+  )).filter(function (el) { return el.offsetParent !== null && !el.disabled; });
+}
+function sheetKeys(ev) {
+  if (ev.key === "Escape") { ev.preventDefault(); closePolicy(); return; }
+  if (ev.key !== "Tab") return;
+  var f = sheetFocusables();
+  if (!f.length) return;
+  var first = f[0], last = f[f.length - 1];
+  if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+  else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+  else if (!document.querySelector("#overlay .sheet").contains(document.activeElement)) {
+    ev.preventDefault(); first.focus();
+  }
 }
 
 /* ══ THEME ═════════════════════════════════════════════════════════════ */
@@ -1473,8 +1519,10 @@ function initTheme() {
   function label() {
     var t = document.documentElement.getAttribute("data-theme");
     var dark = t === "dark" || (!t && window.matchMedia("(prefers-color-scheme: dark)").matches);
+    /* The label names the action, so there is no pressed state to report:
+       "Light" means pressing it goes light. Keeping aria-pressed alongside an
+       action label made a screen reader announce "Light … pressed" in dark. */
     btn.textContent = dark ? "Light" : "Dark";
-    btn.setAttribute("aria-pressed", String(dark));
   }
   btn.addEventListener("click", function () {
     var t = document.documentElement.getAttribute("data-theme");

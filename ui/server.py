@@ -547,6 +547,11 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "AGTDemoConsole/1.0"
     protocol_version = "HTTP/1.1"
 
+    # Set while answering a HEAD: headers are sent, the body is not. The
+    # Content-Length still advertises the length the GET would have had,
+    # which is what RFC 9110 asks for.
+    _head_only = False
+
     # -- plumbing -------------------------------------------------------
 
     def _send(self, code: int, body: bytes, content_type: str) -> None:
@@ -555,7 +560,8 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
         self.end_headers()
-        self.wfile.write(body)
+        if not self._head_only:
+            self.wfile.write(body)
 
     def _json(self, payload: dict, code: int = 200) -> None:
         body = json.dumps(payload, default=str).encode("utf-8")
@@ -581,6 +587,19 @@ class Handler(BaseHTTPRequestHandler):
         sys.stderr.write("  %s\n" % (fmt % args))
 
     # -- routes ---------------------------------------------------------
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        """Answer HEAD like GET without a body.
+
+        Without this, BaseHTTPRequestHandler answers every HEAD — including
+        one for "/" — with its default 501 page, so a health check or a link
+        checker sees the console as broken.
+        """
+        self._head_only = True
+        try:
+            self.do_GET()
+        finally:
+            self._head_only = False
 
     def do_GET(self) -> None:  # noqa: N802
         url = urlparse(self.path)
