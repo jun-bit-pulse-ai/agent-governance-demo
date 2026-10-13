@@ -85,11 +85,11 @@ def main() -> None:
 
     # Act 2 hands the governed callable to acts 3 and 6.
     (safe_db,) = demo.act_two()
-    written.append(_save("02-governed", "Act 2 — two lines of governance"))
+    written.append(_save("02-governed", "Act 2 — two lines put a gate in front"))
 
     for slug, title, run in [
-        ("03-sql-ast", "Act 3 — structure, not string matching", lambda: demo.act_three(safe_db)),
-        ("04-approval", "Act 4 — a human in the loop", demo.act_four),
+        ("03-sql-ast", "Act 3 — reading the request, not scanning for scary words", lambda: demo.act_three(safe_db)),
+        ("04-approval", "Act 4 — some things wait for a person", demo.act_four),
         ("05-identity", "Act 5 — which agent did this?", demo.act_five),
         ("06-audit", "Act 6 — can you prove what happened?", lambda: demo.act_six(safe_db)),
     ]:
