@@ -1,17 +1,35 @@
 # Agent Governance Toolkit — live demo
 
-> An independent demo built on Microsoft's MIT-licensed
-> [agent-governance-toolkit](https://github.com/microsoft/agent-governance-toolkit).
-> Not affiliated with, endorsed by, or supported by Microsoft.
+**AI assistants now run database queries, send email and export files. The usual
+safety measure is telling them to be careful. This demo shows what it looks like
+to put an actual lock there instead.**
 
-A working prototype built on the real
-[microsoft/agent-governance-toolkit](https://github.com/microsoft/agent-governance-toolkit)
-Quick Start. **Every verdict the demo prints is produced by AGT's policy engine**
-evaluating the YAML in `policies/` — nothing is simulated or stubbed.
+It runs the same instruction twice — once with no controls, once through a
+policy gate — and counts what changed. For "delete the customer table":
+
+| | no gate | with gate |
+|---|---|---|
+| customer records | **0** — all 1,284 destroyed | 1,284 — untouched |
+| what ran | the deletion | nothing |
+
+The proof of a blocked action is a number that *didn't move*. That is the whole
+demo in one table.
+
+**New here? Read [docs/PLAIN-ENGLISH.md](docs/PLAIN-ENGLISH.md) first** — the
+same thing with no jargon, including what this deliberately cannot do.
+
+![Governance blocking a destructive query and a PII export](docs/images/02-governed.png)
+
+Every answer the demo gives is produced by Microsoft's real
+[agent-governance-toolkit](https://github.com/microsoft/agent-governance-toolkit)
+evaluating the rules in `policies/`. Nothing is pre-recorded or faked. Building
+it surfaced [eight defects](#findings-from-building-this) in that toolkit, each
+reproduced against the installed package.
 
 Verified against `agent-governance-toolkit==4.1.0`, Python 3.13.
 
-![Governance blocking a destructive query and a PII export](docs/images/02-governed.png)
+> An independent demo built on Microsoft's MIT-licensed agent-governance-toolkit.
+> Not affiliated with, endorsed by, or supported by Microsoft.
 
 ## Run it
 
@@ -20,12 +38,13 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
 .venv/bin/python demo.py
 ```
 
-AGT's `[full]` extra does not install `sqlglot`, yet AGT needs it to parse SQL
-into policy facets, so `requirements.txt` pins it explicitly. Without it every
-`sql.*` facet becomes `UNKNOWN` and SQL rules stop matching. That is fail-closed
-here, because all three policies are `default_action: deny` — but it fails **open**
-under an allow-default policy, which is the posture AGT's own Quick Start uses.
-AGT logs a warning, not an error, so nothing stops you shipping it.
+It prints the story one act per screen. Takes a few seconds, needs no accounts,
+no keys and no network.
+
+> **Maintainer note.** `requirements.txt` pins `sqlglot` explicitly because AGT's
+> own `[full]` extra does not install it, yet AGT needs it to read SQL. Without
+> it, SQL rules silently stop matching — safe here, dangerous elsewhere. Full
+> detail in [finding 2](#2-the-sql-facet-extractor-crashes-on-any-current-sqlglot).
 
 ## The browser console
 
@@ -56,10 +75,16 @@ it the governed lane would allow destructive SQL the terminal demo denies.
 
 ## The scenario
 
-Two agents at a fictional company share a set of genuinely dangerous tools
-(`tools.py`): run SQL, send mail, export datasets. The tools have no guardrails
-and never learn about policy — governance is applied from the outside, at the
-call boundary.
+Two AI assistants at a made-up company share three genuinely dangerous tools
+(`tools.py`): run database queries, send email, export datasets.
+
+The tools have no safety checks of their own and never learn that rules exist.
+That is deliberate — the gate is bolted on from outside, at the moment the tool
+is called, so nothing inside the tool has to be rewritten to make it safe.
+
+Throughout, **"the estate"** means the pretend company data the demo can damage:
+customer records, sent mail, exported files. Watching those counters is how you
+see whether anything actually happened.
 
 | Act | What it shows |
 |-----|---------------|
@@ -100,7 +125,7 @@ PNGs. One caveat on "re-running changes the pictures": Act 6 prints audit-entry
 hashes, which include a timestamp, so `06-audit.*` differs on every capture run
 whether or not anything changed.
 
-## The part worth pausing on (Act 3)
+## The clever bit: reading the instruction, not scanning for scary words
 
 AGT parses SQL into an AST and exposes `sql.verb` as a policy facet. One rule
 gets both of these right, where a substring denylist gets both wrong:
@@ -324,6 +349,7 @@ ancient sqlglot. Treat the runtime as the source of truth; this demo does.
 - `check_policy.py` — condition-coverage test for the policies; see finding 5.
 - `ui/server.py` — stdlib-only HTTP server; the console's real verdicts.
 - `ui/static/index.html` — the console page; one file, no framework, no build.
+- `docs/PLAIN-ENGLISH.md` — the no-jargon explanation. Start here.
 - `docs/ARCHITECTURE.md` — design for governing a multi-agent build.
 - `docs/PARALLEL_AGENT_PLAN.md` — how several agents would build this repo.
 - `capture.py` — re-renders the README images from a real run.

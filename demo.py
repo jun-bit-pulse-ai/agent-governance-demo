@@ -73,7 +73,7 @@ def _attempt(governed, call, describe) -> None:
 # ── Act 1 ─────────────────────────────────────────────────────────────────
 
 def act_one() -> None:
-    t.act(1, "The agent you have today", "Capable tools, no control surface.")
+    t.act(1, "The agent you have today", "Real tools. Nothing standing in the way.")
     t.estate(tools.TABLES, "production")
 
     t.call("db_query", DISGUISED_DROP)
@@ -100,7 +100,7 @@ def act_one() -> None:
 # ── Act 2 ─────────────────────────────────────────────────────────────────
 
 def act_two() -> tuple:
-    t.act(2, "Two lines of governance", "The tool code does not change at all.")
+    t.act(2, "Two lines put a gate in front", "The tools themselves are not modified.")
     tools.reset()
 
     t.banner(
@@ -153,8 +153,8 @@ def act_two() -> tuple:
 def act_three(safe_db) -> None:
     t.act(
         3,
-        "Structure, not string matching",
-        "AGT parses SQL into an AST and evaluates policy on the verb.",
+        "Reading the request, not scanning for scary words",
+        "The rule reads what the query does, not what it looks like.",
     )
 
     for label, query in (
@@ -199,7 +199,7 @@ def _security_team(request) -> ApprovalDecision:
 
 
 def act_four() -> None:
-    t.act(4, "A human in the loop", "require_approval routes the decision to a person.")
+    t.act(4, "Some things wait for a person", "Not allowed, not blocked — held for sign-off.")
 
     safe_email = govern(
         tools.send_email,
@@ -229,7 +229,7 @@ def act_four() -> None:
 # ── Act 5 ─────────────────────────────────────────────────────────────────
 
 def act_five() -> None:
-    t.act(5, "Which agent did this?", "Identity decides which policy applies.")
+    t.act(5, "Which agent did this?", "Same request, different asker, different answer.")
 
     # One policy file, two identities. Varying only the agent_id isolates the
     # effect being claimed; varying the policy file too would prove nothing
@@ -258,7 +258,7 @@ def act_five() -> None:
 # ── Act 6 ─────────────────────────────────────────────────────────────────
 
 def act_six(safe_db) -> None:
-    t.act(6, "Can you prove what happened?", "Every decision is hash-chained.")
+    t.act(6, "Can you prove what happened?", "Every decision is sealed into a logbook.")
 
     # Each governed callable keeps its own AuditLog (govern() exposes it via
     # .audit_log but takes no shared-sink argument), so this is Nova's
